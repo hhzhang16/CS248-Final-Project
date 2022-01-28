@@ -46,8 +46,17 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_vertex(Halfedge_Mesh:
  */
 std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::EdgeRef e) {
 
-    (void)e;
-    return std::nullopt;
+    // get the half edges
+    HalfEdgeRef halfedge1 = e.halfedge();
+    HalfEdgeRef halfedge2 = halfedge1.twin();
+
+    // get the 2 vertices attached to this edge
+    VertexRef v1 = halfedge1.vertex();
+    VertexRef v2 = halfedge2.vertex();
+
+    // delete one vertex at a time
+    FaceRef newFace1 = erase_vertex(v1);
+    return erase_vertex(v2);
 }
 
 /*
