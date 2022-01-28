@@ -60,10 +60,23 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
     HalfedgeRef he1 = e->halfedge();
     HalfedgeRef he2 = he1->twin();
 
+    // find the half edges that point to he1 and he2
+    HalfedgeRef h1_prev = he1;
+    while(h1_prev->twin()->next() != he1) {
+        // do something interesting with h
+        h1_prev = h1_prev->twin()->next();
+
+    }
+
+    HalfedgeRef h2_prev = he2;
+    while(h2_prev->twin()->next() != he2) {
+        // do something interesting with h
+        h2_prev = h2_prev->twin()->next();
+    }
+
     // get the 2 vertices attached to this edge
     VertexRef v1 = he1->vertex();
     VertexRef v2 = he2->vertex();
-    Vec3 edgeCenter = e->center(); // position of new vertex?
 
     // any vertices that have he1 or he2 as its halfedge should be changed
     if (v1->halfedge() == he1) {
@@ -85,6 +98,7 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
 
     // Any faces that are triangles that include e should be deleted
     if (face1->degree() == 3) { // delete face
+
         HalfedgeRef toDelete1 = he1->next();
         HalfedgeRef toDelete2 = toDelete1->next();
         VertexRef v3 = toDelete2->vertex();
@@ -97,10 +111,18 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
             v2->halfedge() = toDelete1->twin()->next();
         }
 
+        // change he1->next bc toDelete1 will be deleted
+        he1->next() = toDelete1->twin()->next();
+
         // change the twins of toDelete1 and toDelete2 to point at each other
         toDelete1->twin()->twin() = toDelete2->twin();
         toDelete2->twin()->twin() = toDelete1->twin();
+        
+        // arbitrarily choose toDelete1's edge to keep
+        toDelete1->edge()->halfedge() = toDelete1->twin();
+        toDelete2->twin()->edge() = toDelete1->edge();
 
+        erase(toDelete2->edge());
         erase(toDelete1);
         erase(toDelete2);
         erase(face1);
@@ -118,43 +140,44 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
             v1->halfedge() = toDelete1->twin()->next();
         }
 
+        // change he2->next
+        he2->next() = toDelete1->twin()->next();
+
         // change the twins of toDelete1 and toDelete2 to point at each other
         toDelete1->twin()->twin() = toDelete2->twin();
         toDelete2->twin()->twin() = toDelete1->twin();
+        
+        // arbitrarily choose toDelete1's edge to keep
+        toDelete1->edge()->halfedge() = toDelete1->twin();
+        toDelete2->twin()->edge() = toDelete1->edge();
 
+        erase(toDelete2->edge());
         erase(toDelete1);
         erase(toDelete2);
         erase(face2);
     }
 
     // Delete halfedges he1 and he2 by making sure the next() that points to them points to other vertices
-    HalfedgeRef h = he1;
-    while(h->twin()->next() != he1) {
-            // do something interesting with h
-            h = h->twin()->next();
-    }
-    h->twin()->next() = he1->next();
-
-    h = he2;
-    while(h->twin()->next() != he2) {
-            // do something interesting with h
-            h = h->twin()->next();
-    }
-    h->twin()->next() = he2->next();
-
+    h1_prev->twin()->next() = he1->next();
+    h2_prev->twin()->next() = he2->next();
 
     // delete the vertex with the smallest degree and have all of its half edges point to the other v
     VertexRef smallerVertex = v1->degree() < v2->degree() ? v1 : v2;
     VertexRef largerVertex = v1->degree() < v2->degree() ? v2 : v1;
-    h = smallerVertex->halfedge();
+    HalfedgeRef h = smallerVertex->halfedge();
     do {
         h->vertex() = largerVertex;
         h = h->twin()->next();
     } while (h != smallerVertex->halfedge());
 
+    // Move the larger vertex to be in the middle of the edge
+    largerVertex->pos = e->center();
+
     // Now we can safely delete the edge;
+    erase(e);
     erase(he1);
     erase(he2);
+    erase(smallerVertex);
 
     return largerVertex;
 }
