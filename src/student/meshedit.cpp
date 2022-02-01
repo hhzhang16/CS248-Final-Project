@@ -2,6 +2,7 @@
 #include <queue>
 #include <set>
 #include <unordered_map>
+#include <iostream>
 
 #include "../geometry/halfedge.h"
 #include "debug.h"
@@ -48,6 +49,45 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::E
 
     (void)e;
     return std::nullopt;
+}
+
+/* 
+    This helper function deletes the face if it happens to be a triangle.
+    It spares one halfedge and the vertex it points to (not its corresponding vertex)
+*/
+void Halfedge_Mesh::delete_face_if_needed(Halfedge_Mesh::FaceRef f, 
+                                          Halfedge_Mesh::VertexRef v, 
+                                          Halfedge_Mesh::HalfedgeRef he) {
+    if (f->degree() == 3) { // delete face
+
+        HalfedgeRef toDelete1 = he->next();
+        HalfedgeRef toDelete2 = toDelete1->next();
+        VertexRef v3 = toDelete2->vertex();
+        if (v3->halfedge() == toDelete2) {
+            v3->halfedge() = toDelete2->twin()->next();
+        }
+
+        // if v has any of the to-deleted half edges as its halfedge, change it
+        if (v->halfedge() == toDelete1) {
+            v->halfedge() = toDelete1->twin()->next();
+        }
+
+        // change he->next bc toDelete1 will be deleted
+        he->next() = toDelete1->twin()->next();
+
+        // change the twins of toDelete1 and toDelete2 to point at each other
+        toDelete1->twin()->twin() = toDelete2->twin();
+        toDelete2->twin()->twin() = toDelete1->twin();
+        
+        // arbitrarily choose toDelete1's edge to keep
+        toDelete1->edge()->halfedge() = toDelete1->twin();
+        toDelete2->twin()->edge() = toDelete1->edge();
+
+        erase(toDelete2->edge());
+        erase(toDelete1);
+        erase(toDelete2);
+        erase(f);
+    }
 }
 
 /*
@@ -97,65 +137,8 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
     }
 
     // Any faces that are triangles that include e should be deleted
-    if (face1->degree() == 3) { // delete face
-
-        HalfedgeRef toDelete1 = he1->next();
-        HalfedgeRef toDelete2 = toDelete1->next();
-        VertexRef v3 = toDelete2->vertex();
-        if (v3->halfedge() == toDelete2) {
-            v3->halfedge() = toDelete2->twin()->next();
-        }
-
-        // if v2 has any of the to-deleted half edges as its halfedge, change it
-        if (v2->halfedge() == toDelete1) {
-            v2->halfedge() = toDelete1->twin()->next();
-        }
-
-        // change he1->next bc toDelete1 will be deleted
-        he1->next() = toDelete1->twin()->next();
-
-        // change the twins of toDelete1 and toDelete2 to point at each other
-        toDelete1->twin()->twin() = toDelete2->twin();
-        toDelete2->twin()->twin() = toDelete1->twin();
-        
-        // arbitrarily choose toDelete1's edge to keep
-        toDelete1->edge()->halfedge() = toDelete1->twin();
-        toDelete2->twin()->edge() = toDelete1->edge();
-
-        erase(toDelete2->edge());
-        erase(toDelete1);
-        erase(toDelete2);
-        erase(face1);
-    }
-    if (face2->degree() == 3) { // delete face
-        HalfedgeRef toDelete1 = he2->next();
-        HalfedgeRef toDelete2 = toDelete1->next();
-        VertexRef v3 = toDelete2->vertex();
-        if (v3->halfedge() == toDelete2) {
-            v3->halfedge() = toDelete2->twin()->next();
-        }
-
-        // if v1 has any of the to-deleted half edges as its halfedge, change it
-        if (v1->halfedge() == toDelete1) {
-            v1->halfedge() = toDelete1->twin()->next();
-        }
-
-        // change he2->next
-        he2->next() = toDelete1->twin()->next();
-
-        // change the twins of toDelete1 and toDelete2 to point at each other
-        toDelete1->twin()->twin() = toDelete2->twin();
-        toDelete2->twin()->twin() = toDelete1->twin();
-        
-        // arbitrarily choose toDelete1's edge to keep
-        toDelete1->edge()->halfedge() = toDelete1->twin();
-        toDelete2->twin()->edge() = toDelete1->edge();
-
-        erase(toDelete2->edge());
-        erase(toDelete1);
-        erase(toDelete2);
-        erase(face2);
-    }
+    delete_face_if_needed(face1, v2, he1);
+    delete_face_if_needed(face2, v1, he2);
 
     // Delete halfedges he1 and he2 by making sure the next() that points to them points to other vertices
     h1_prev->twin()->next() = he1->next();
@@ -188,8 +171,68 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Mesh::FaceRef f) {
 
-    (void)f;
-    return std::nullopt;
+    // Create a new vertex, set its position and halfedge
+    VertexRef newV = new_vertex();
+    newV->pos = f->center();
+
+    // For every halfedge coming from vertices around f, reassign to come from newV
+    HalfedgeRef firstHeFromF = f->halfedge()->twin()->next();
+    HalfedgeRef tempHe = firstHeFromF;
+    bool newFirstHe = false; // whether or not firstHeFromF was deleted
+    do {
+        if (newFirstHe) {
+            firstHeFromF = tempHe;
+            newFirstHe = false;
+        }
+
+        HalfedgeRef nextHe = tempHe->twin()->next();
+        if (nextHe->twin()->face() == f) {
+            nextHe = nextHe->next();
+        }
+        HalfedgeRef prevBeforeLastHe = tempHe;
+        HalfedgeRef lastHe = tempHe;
+        while (lastHe->next() != tempHe) {
+            prevBeforeLastHe = lastHe;
+            lastHe = lastHe->next();
+        }
+
+        if (lastHe->twin()->face() == f) {
+            // delete halfedge that lies on an edge on F
+
+            if (tempHe->face()->degree() == 3) {
+                if (tempHe == firstHeFromF) {
+                    newFirstHe = true; // will need a new loop ending
+                }
+                // a triangle adjacent to f, should be deleted
+                delete_face_if_needed(tempHe->face(), tempHe->vertex(), lastHe);
+            } else {
+                // non-triangle adjacent to f, only delete halfedge lastHe
+                prevBeforeLastHe->next() = tempHe;
+                tempHe->vertex() = newV;
+            }
+            erase(lastHe);
+        } else {
+            tempHe->vertex() = newV;
+        }
+        tempHe = nextHe;
+    } while (tempHe != firstHeFromF);
+
+    // delete every he on face as well as its V & E
+    tempHe = f->halfedge();
+    for (unsigned int i = 0; i < f->degree(); i++) {
+        HalfedgeRef nextHe = tempHe->next();
+        erase(tempHe->vertex());
+        erase(tempHe->edge());
+        erase(tempHe);
+        tempHe = nextHe;
+    }
+
+    newV->halfedge() = firstHeFromF;
+    erase(f);
+
+    return newV;
+
+    // Is collapsing a face just collapsing the face's edges?
 }
 
 /*
