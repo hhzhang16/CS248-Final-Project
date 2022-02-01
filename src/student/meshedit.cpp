@@ -61,14 +61,10 @@ void Halfedge_Mesh::delete_face(Halfedge_Mesh::FaceRef f,
     HalfedgeRef toDelete1 = he->next();
     HalfedgeRef toDelete2 = toDelete1->next();
     VertexRef v3 = toDelete2->vertex();
-    if (v3->halfedge() == toDelete2) {
-        v3->halfedge() = toDelete2->twin()->next();
-    }
+    v3->halfedge() = toDelete2->twin()->next();
 
     // if v has any of the to-deleted half edges as its halfedge, change it
-    if (v->halfedge() == toDelete1) {
-        v->halfedge() = toDelete1->twin()->next();
-    }
+    v->halfedge() = toDelete1->twin()->next();
 
     // change he->next bc toDelete1 will be deleted
     he->next() = toDelete1->twin()->next();
@@ -116,22 +112,14 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
     VertexRef v2 = he2->vertex();
 
     // any vertices that have he1 or he2 as its halfedge should be changed
-    if (v1->halfedge() == he1) {
-        v1->halfedge() = he1->twin()->next();
-    }
-    if (v2->halfedge() == he2) {
-        v2->halfedge() = he2->twin()->next();
-    }
+    v1->halfedge() = he1->twin()->next();
+    v2->halfedge() = he2->twin()->next();
 
     // any face that has he1 or he2 as its boundary halfedge should be changed
     FaceRef face1 = he1->face();
-    if (face1->halfedge() == he1) {
-        face1->halfedge() = he1->next();
-    }
+    face1->halfedge() = he1->next();
     FaceRef face2 = he2->face();
-    if (face2->halfedge() == he2) {
-        face2->halfedge() = he2->next();
-    }
+    face2->halfedge() = he2->next();
 
     // Any faces that are triangles that include e should be deleted
     delete_face(face1, v2, he1);
@@ -229,13 +217,9 @@ std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::Ed
     HalfedgeRef he2 = he1->twin();
     FaceRef f2 = he2->face();
 
-    // if vertices point at either halfedge, reassign
-    if (he1->vertex()->halfedge() == he1) {
-        he1->vertex()->halfedge() = he2->next();
-    }
-    if (he2->vertex()->halfedge() == he2) {
-        he2->vertex()->halfedge() = he1->next();
-    }
+    // reassign vertex halfedges in case any point at he1/he2
+    he1->vertex()->halfedge() = he2->next();
+    he2->vertex()->halfedge() = he1->next();
 
     // get the rest of the halfedges
     HalfedgeRef he1Next = he1->next();
