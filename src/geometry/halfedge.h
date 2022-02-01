@@ -696,6 +696,9 @@ private:
     std::set<EdgeRef> eerased;
     std::set<FaceRef> ferased;
     std::set<HalfedgeRef> herased;
+
+    // helper function that deletes a face
+    void delete_face_if_needed(FaceRef f, VertexRef v, HalfedgeRef he);
 };
 
 /*
