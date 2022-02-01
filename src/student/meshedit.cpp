@@ -272,9 +272,91 @@ std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::Ed
     the edge that was split, rather than the new edges.
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(Halfedge_Mesh::EdgeRef e) {
+    // painting the picture: right now it looks like <|>, we'll make it <+>
+    // the variable naming assumes a vertical edge and CCW direction but should work no matter the setup
 
-    (void)e;
-    return std::nullopt;
+    // get the halfedges and the faces on either side of e
+    // arbitrarily assigning the current edge to be the "top edge" coming out of the new vertex
+    HalfedgeRef heNorthLeft = e->halfedge();
+    FaceRef fTopLeft = heNorthLeft->face();
+    HalfedgeRef heNorthRight = heNorthLeft->twin();
+    FaceRef fTopRight = heNorthRight->face();
+
+    // make a vertex, two new faces
+    FaceRef fBottomLeft = new_face();
+    FaceRef fBottomRight = new_face();
+    VertexRef newV = new_vertex();
+    newV->halfedge() = heNorthLeft;
+    newV->pos = e->center();
+
+    // do the left side first
+    HalfedgeRef heNorthwest= heNorthLeft->next();
+    HalfedgeRef heSouthwest = heNorthwest->next();
+    HalfedgeRef heSouthLeft = new_halfedge();
+    // new edge and new halfedges
+    EdgeRef eLeft = new_edge();
+    HalfedgeRef heWestUpper = new_halfedge();
+    HalfedgeRef heWestLower = new_halfedge();
+    heWestUpper->twin() = heWestLower;
+    heWestLower->twin() = heWestUpper;
+    heWestUpper->edge() = eLeft;
+    heWestLower->edge() = eLeft;
+    eLeft->halfedge() = heWestUpper;
+    // Lower left triangle
+    heSouthLeft->vertex() = heNorthLeft->vertex();
+    heSouthLeft->next() = heWestLower;
+    heSouthLeft->face() = fBottomLeft;
+    heWestLower->vertex() = newV;
+    heWestLower->next() = heSouthwest;
+    heWestLower->face() = fBottomLeft;
+    heSouthwest->next() = heSouthLeft;
+    heSouthwest->face() = fBottomLeft;
+    fBottomLeft->halfedge() = heSouthLeft;
+    // Upper left triangle
+    heNorthLeft->vertex() = newV;
+    heNorthwest->next() = heWestUpper;
+    heWestUpper->next() = heNorthLeft;
+    heWestUpper->face() = fTopLeft;
+    heWestUpper->vertex() = heSouthwest->vertex();
+    fTopLeft->halfedge() = heNorthLeft;
+
+    // next, the right half
+    HalfedgeRef heSoutheast = heNorthRight->next();
+    HalfedgeRef heNortheast = heSoutheast->next();
+    HalfedgeRef heSouthRight = new_halfedge();
+    heSouthRight->twin() = heSouthLeft;
+    heSouthLeft->twin() = heSouthRight;
+    EdgeRef eBottom = new_edge();
+    eBottom->halfedge() = heSouthLeft;
+    heSouthLeft->edge() = eBottom;
+    heSouthRight->edge() = eBottom;
+    // new edge and halfedges
+    EdgeRef eRight = new_edge();
+    HalfedgeRef heEastUpper = new_halfedge();
+    HalfedgeRef heEastLower = new_halfedge();
+    heEastUpper->twin() = heEastLower;
+    heEastLower->twin() = heEastUpper;
+    heEastUpper->edge() = eRight;
+    heEastLower->edge() = eRight;
+    eRight->halfedge() = heEastUpper;
+    // Lower right triangle
+    heSouthRight->vertex() = newV;
+    heSouthRight->next() = heSoutheast;
+    heSouthRight->face() = fBottomRight;
+    heSoutheast->next() = heEastLower;
+    heSoutheast->face() = fBottomRight;
+    heEastLower->vertex() = heNortheast->vertex();
+    heEastLower->next() = heSouthRight;
+    heEastLower->face() = fBottomRight;
+    fBottomRight->halfedge() = heSouthRight;
+    // Upper right triangle
+    heNorthRight->next() = heEastUpper;
+    heEastUpper->vertex() = newV;
+    heEastUpper->next() = heNortheast;
+    heEastUpper->face() = fTopRight;
+    fTopRight->halfedge() = heNorthRight;
+
+    return newV;
 }
 
 /* Note on the beveling process:
