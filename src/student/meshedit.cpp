@@ -231,8 +231,6 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Me
     erase(f);
 
     return newV;
-
-    // Is collapsing a face just collapsing the face's edges?
 }
 
 /*
@@ -240,9 +238,53 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Me
     flipped edge.
 */
 std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::EdgeRef e) {
+    // get the halfedges and the faces on either side of e
+    HalfedgeRef he1 = e->halfedge();
+    FaceRef f1 = he1->face();
+    HalfedgeRef he2 = he1->twin();
+    FaceRef f2 = he2->face();
 
-    (void)e;
-    return std::nullopt;
+    // if vertices point at either halfedge, reassign
+    if (he1->vertex()->halfedge() == he1) {
+        he1->vertex()->halfedge() = he2->next();
+    }
+    if (he2->vertex()->halfedge() == he2) {
+        he2->vertex()->halfedge() = he1->next();
+    }
+
+    // get the rest of the halfedges
+    HalfedgeRef he1Next = he1->next();
+    HalfedgeRef he1Next2 = he1Next->next();
+    HalfedgeRef he2Next = he2->next();
+    HalfedgeRef he2Next2 = he2Next->next();
+
+    // create two new faces and reassign halfedges to the faces
+    FaceRef newF1 = new_face();
+    FaceRef newF2 = new_face();
+    // face 1: connect he1 with he2Next2 with he1Next, connect he1 with he1Next2's vertex
+    he1->next() = he2Next2;
+    he1->face() = newF1;
+    he2Next2->next() = he1Next;
+    he2Next2->face() = newF1;
+    he1Next->next() = he1;
+    he1Next->face() = newF1;
+    he1->vertex() = he1Next2->vertex();
+    newF1->halfedge() = he1;
+    // face2: same as face 1 but use 1 instead of 2 and vice versa
+    he2->next() = he1Next2;
+    he2->face() = newF2;
+    he1Next2->next() = he2Next;
+    he1Next2->face() = newF2;
+    he2Next->next() = he2;
+    he2Next->face() = newF2;
+    he2->vertex() = he2Next2->vertex();
+    newF2->halfedge() = he2;
+
+    // delete the old faces
+    erase(f1);
+    erase(f2);
+
+    return e;
 }
 
 /*
