@@ -258,31 +258,25 @@ std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::Ed
     HalfedgeRef he2Next = he2->next();
     HalfedgeRef he2Next2 = he2Next->next();
 
-    // create two new faces and reassign halfedges to the faces
-    FaceRef newF1 = new_face();
-    FaceRef newF2 = new_face();
+    // reassign halfedges to the faces
     // face 1: connect he1 with he2Next2 with he1Next, connect he1 with he1Next2's vertex
     he1->next() = he2Next2;
-    he1->face() = newF1;
+    he1->face() = f1;
     he2Next2->next() = he1Next;
-    he2Next2->face() = newF1;
+    he2Next2->face() = f1;
     he1Next->next() = he1;
-    he1Next->face() = newF1;
+    he1Next->face() = f1;
     he1->vertex() = he1Next2->vertex();
-    newF1->halfedge() = he1;
+    f1->halfedge() = he1;
     // face2: same as face 1 but use 1 instead of 2 and vice versa
     he2->next() = he1Next2;
-    he2->face() = newF2;
+    he2->face() = f2;
     he1Next2->next() = he2Next;
-    he1Next2->face() = newF2;
+    he1Next2->face() = f2;
     he2Next->next() = he2;
-    he2Next->face() = newF2;
+    he2Next->face() = f2;
     he2->vertex() = he2Next2->vertex();
-    newF2->halfedge() = he2;
-
-    // delete the old faces
-    erase(f1);
-    erase(f2);
+    f2->halfedge() = he2;
 
     return e;
 }
