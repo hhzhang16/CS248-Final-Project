@@ -271,40 +271,41 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Me
     flipped edge.
 */
 std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::EdgeRef e) {
+
+    // “rotated” around the face, in the sense that each endpoint moves to the next vertex
     // get the halfedges and the faces on either side of e
     HalfedgeRef he1 = e->halfedge();
     FaceRef f1 = he1->face();
     HalfedgeRef he2 = he1->twin();
     FaceRef f2 = he2->face();
-    // reassign vertex halfedges in case any point at he1/he2
-    he1->vertex()->halfedge() = he2->next();
-    he2->vertex()->halfedge() = he1->next();
 
     // get the rest of the halfedges
     HalfedgeRef he1Next = he1->next();
-    HalfedgeRef he1Next2 = he1Next->next();
+    HalfedgeRef he1Prev = find_prev_halfedge(he1);
     HalfedgeRef he2Next = he2->next();
-    HalfedgeRef he2Next2 = he2Next->next();
+    HalfedgeRef he2Prev = find_prev_halfedge(he2);
 
-    // reassign halfedges to the faces
-    // face 1: connect he1 with he2Next2 with he1Next, connect he1 with he1Next2's vertex
-    he1->next() = he2Next2;
-    he1->face() = f1;
-    he2Next2->next() = he1Next;
-    he2Next2->face() = f1;
-    he1Next->next() = he1;
-    he1Next->face() = f1;
-    he1->vertex() = he1Next2->vertex();
+    // reassign halfedges
+    he1->vertex()->halfedge() = he2Next;
+    he2->vertex()->halfedge() = he1Next;
     f1->halfedge() = he1;
-    // face2: same as face 1 but use 1 instead of 2 and vice versa
-    he2->next() = he1Next2;
-    he2->face() = f2;
-    he1Next2->next() = he2Next;
-    he1Next2->face() = f2;
-    he2Next->next() = he2;
-    he2Next->face() = f2;
-    he2->vertex() = he2Next2->vertex();
     f2->halfedge() = he2;
+
+    // describing as if we're flipping <-> to <|>
+    // update vertices
+    he1->vertex() = he2Next->next()->vertex();
+    he2->vertex() = he1Next->next()->vertex();
+    // lower left
+    he1->next() = he1Next->next();
+    he1Next->face() = f2;
+    he1Next->next() = he2;
+    // upper right
+    he2->next() = he2Next->next();
+    he2Next->next() = he1;
+    he2Next->face() = f1;
+
+    he1Prev->next() = he2Next;
+    he2Prev->next() = he1Next;
 
     return e;
 }
