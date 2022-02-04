@@ -698,7 +698,9 @@ private:
     std::set<HalfedgeRef> herased;
 
     // helper function that deletes a face
-    void delete_face(FaceRef f, VertexRef v, HalfedgeRef he);
+    void delete_face_if_needed(FaceRef f, VertexRef v, HalfedgeRef he);
+    // helper function that finds the last edge on a face before the current edge
+    HalfedgeRef find_prev_halfedge(HalfedgeRef first);
 };
 
 /*

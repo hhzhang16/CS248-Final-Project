@@ -52,35 +52,53 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::E
 }
 
 /* 
-    This helper function deletes the face (assuming it is a triangle).
+    This helper function deletes the face if it happens to be a triangle.
     It spares one halfedge and the vertex it points to (not its corresponding vertex)
 */
-void Halfedge_Mesh::delete_face(Halfedge_Mesh::FaceRef f, 
+void Halfedge_Mesh::delete_face_if_needed(Halfedge_Mesh::FaceRef f, 
                                           Halfedge_Mesh::VertexRef v, 
                                           Halfedge_Mesh::HalfedgeRef he) {
-    HalfedgeRef toDelete1 = he->next();
-    HalfedgeRef toDelete2 = toDelete1->next();
-    VertexRef v3 = toDelete2->vertex();
-    v3->halfedge() = toDelete2->twin()->next();
+    if (f->degree() == 3) { // delete face
 
-    // if v has any of the to-deleted half edges as its halfedge, change it
-    v->halfedge() = toDelete1->twin()->next();
+        HalfedgeRef toDelete1 = he->next();
+        HalfedgeRef toDelete2 = toDelete1->next();
+        VertexRef v3 = toDelete2->vertex();
+        if (v3->halfedge() == toDelete2) {
+            v3->halfedge() = toDelete2->twin()->next();
+        }
 
-    // change he->next bc toDelete1 will be deleted
-    he->next() = toDelete1->twin()->next();
+        // if v has any of the to-deleted half edges as its halfedge, change it
+        if (v->halfedge() == toDelete1) {
+            v->halfedge() = toDelete1->twin()->next();
+        }
 
-    // change the twins of toDelete1 and toDelete2 to point at each other
-    toDelete1->twin()->twin() = toDelete2->twin();
-    toDelete2->twin()->twin() = toDelete1->twin();
-    
-    // arbitrarily choose toDelete1's edge to keep
-    toDelete1->edge()->halfedge() = toDelete1->twin();
-    toDelete2->twin()->edge() = toDelete1->edge();
+        // change he->next bc toDelete1 will be deleted
+        he->next() = toDelete1->twin()->next();
 
-    erase(toDelete2->edge());
-    erase(toDelete1);
-    erase(toDelete2);
-    erase(f);
+        // change the twins of toDelete1 and toDelete2 to point at each other
+        toDelete1->twin()->twin() = toDelete2->twin();
+        toDelete2->twin()->twin() = toDelete1->twin();
+        
+        // arbitrarily choose toDelete1's edge to keep
+        toDelete1->edge()->halfedge() = toDelete1->twin();
+        toDelete2->twin()->edge() = toDelete1->edge();
+
+        erase(toDelete2->edge());
+        erase(toDelete1);
+        erase(toDelete2);
+        erase(f);
+    }
+}
+
+/*
+    This helper function finds and returns the halfedge whose next pointer points to the current halfedge
+*/
+Halfedge_Mesh::HalfedgeRef Halfedge_Mesh::find_prev_halfedge(Halfedge_Mesh::HalfedgeRef first) {
+    HalfedgeRef prev = first;
+    while (prev->next() != first) {
+        prev = prev->next();
+    }
+    return prev;
 }
 
 /*
@@ -92,20 +110,10 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
     // get the half edges
     HalfedgeRef he1 = e->halfedge();
     HalfedgeRef he2 = he1->twin();
-
-    // find the half edges that point to he1 and he2
-    HalfedgeRef h1_prev = he1;
-    while(h1_prev->twin()->next() != he1) {
-        // do something interesting with h
-        h1_prev = h1_prev->twin()->next();
-
-    }
-
-    HalfedgeRef h2_prev = he2;
-    while(h2_prev->twin()->next() != he2) {
-        // do something interesting with h
-        h2_prev = h2_prev->twin()->next();
-    }
+  
+    // find the half edges before h1 and h2 that come from the same vertices
+    HalfedgeRef h1PrevFromV = find_prev_halfedge(he1)->twin();
+    HalfedgeRef h2PrevFromV = find_prev_halfedge(he2)->twin();
 
     // get the 2 vertices attached to this edge
     VertexRef v1 = he1->vertex();
@@ -122,12 +130,12 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
     face2->halfedge() = he2->next();
 
     // Any faces that are triangles that include e should be deleted
-    delete_face(face1, v2, he1);
-    delete_face(face2, v1, he2);
+    delete_face_if_needed(face1, v2, he1);
+    delete_face_if_needed(face2, v1, he2);
 
     // Delete halfedges he1 and he2 by making sure the next() that points to them points to other vertices
-    h1_prev->twin()->next() = he1->next();
-    h2_prev->twin()->next() = he2->next();
+    h1PrevFromV->twin()->next() = he1->next();
+    h2PrevFromV->twin()->next() = he2->next();
 
     // delete the vertex with the smallest degree and have all of its half edges point to the other v
     VertexRef smallerVertex = v1->degree() < v2->degree() ? v1 : v2;
@@ -174,15 +182,27 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Me
         if (nextHe->twin()->face() == f) {
             nextHe = nextHe->next();
         }
-        HalfedgeRef prevBeforeLastHe = tempHe->next();
-        HalfedgeRef lastHe = prevBeforeLastHe->next();
+        HalfedgeRef prevBeforeLastHe = tempHe;
+        HalfedgeRef lastHe = tempHe;
+        while (lastHe->next() != tempHe) {
+            prevBeforeLastHe = lastHe;
+            lastHe = lastHe->next();
+        }
+
         if (lastHe->twin()->face() == f) {
             // delete halfedge that lies on an edge on F
-            if (tempHe == firstHeFromF) {
-                newFirstHe = true; // will need a new loop ending
+
+            if (tempHe->face()->degree() == 3) {
+                if (tempHe == firstHeFromF) {
+                    newFirstHe = true; // will need a new loop ending
+                }
+                // a triangle adjacent to f, should be deleted
+                delete_face_if_needed(tempHe->face(), tempHe->vertex(), lastHe);
+            } else {
+                // non-triangle adjacent to f, only delete halfedge lastHe
+                prevBeforeLastHe->next() = tempHe;
+                tempHe->vertex() = newV;
             }
-            // a triangle adjacent to f, should be deleted
-            delete_face(tempHe->face(), tempHe->vertex(), lastHe);
             erase(lastHe);
         } else {
             tempHe->vertex() = newV;
@@ -216,7 +236,6 @@ std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::Ed
     FaceRef f1 = he1->face();
     HalfedgeRef he2 = he1->twin();
     FaceRef f2 = he2->face();
-
     // reassign vertex halfedges in case any point at he1/he2
     he1->vertex()->halfedge() = he2->next();
     he2->vertex()->halfedge() = he1->next();
