@@ -58,6 +58,11 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_vertex(Halfedge_Mesh:
  */
 std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::EdgeRef e) {
 
+    // if e is a boundary edge, nothing happens
+    if (e->on_boundary()) {
+        return std::nullopt;
+    }
+
     // get the half edges
     HalfedgeRef he1 = e->halfedge();
     HalfedgeRef he2 = he1->twin();
