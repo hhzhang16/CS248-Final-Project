@@ -2,6 +2,7 @@
 #include <queue>
 #include <set>
 #include <unordered_map>
+#include <iostream>
 
 #include "../geometry/halfedge.h"
 #include "debug.h"
@@ -59,14 +60,111 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::E
     return erase_vertex(v2);
 }
 
+/* 
+    This helper function deletes the face if it happens to be a triangle.
+    It spares one halfedge and the vertex it points to (not its corresponding vertex)
+*/
+void Halfedge_Mesh::delete_face_if_needed(Halfedge_Mesh::FaceRef f, 
+                                          Halfedge_Mesh::VertexRef v, 
+                                          Halfedge_Mesh::HalfedgeRef he) {
+    if (f->degree() == 3) { // delete face
+
+        HalfedgeRef toDelete1 = he->next();
+        HalfedgeRef toDelete2 = toDelete1->next();
+        VertexRef v3 = toDelete2->vertex();
+        if (v3->halfedge() == toDelete2) {
+            v3->halfedge() = toDelete2->twin()->next();
+        }
+
+        // if v has any of the to-deleted half edges as its halfedge, change it
+        if (v->halfedge() == toDelete1) {
+            v->halfedge() = toDelete1->twin()->next();
+        }
+
+        // change he->next bc toDelete1 will be deleted
+        he->next() = toDelete1->twin()->next();
+
+        // change the twins of toDelete1 and toDelete2 to point at each other
+        toDelete1->twin()->twin() = toDelete2->twin();
+        toDelete2->twin()->twin() = toDelete1->twin();
+        
+        // arbitrarily choose toDelete1's edge to keep
+        toDelete1->edge()->halfedge() = toDelete1->twin();
+        toDelete2->twin()->edge() = toDelete1->edge();
+
+        erase(toDelete2->edge());
+        erase(toDelete1);
+        erase(toDelete2);
+        erase(f);
+    }
+}
+
+/*
+    This helper function finds and returns the halfedge whose next pointer points to the current halfedge
+*/
+Halfedge_Mesh::HalfedgeRef Halfedge_Mesh::find_prev_halfedge(Halfedge_Mesh::HalfedgeRef first) {
+    HalfedgeRef prev = first;
+    while (prev->next() != first) {
+        prev = prev->next();
+    }
+    return prev;
+}
+
 /*
     This method should collapse the given edge and return an iterator to
     the new vertex created by the collapse.
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Mesh::EdgeRef e) {
 
-    (void)e;
-    return std::nullopt;
+    // get the half edges
+    HalfedgeRef he1 = e->halfedge();
+    HalfedgeRef he2 = he1->twin();
+  
+    // find the half edges before h1 and h2 that come from the same vertices
+    HalfedgeRef h1PrevFromV = find_prev_halfedge(he1)->twin();
+    HalfedgeRef h2PrevFromV = find_prev_halfedge(he2)->twin();
+
+    // get the 2 vertices attached to this edge
+    VertexRef v1 = he1->vertex();
+    VertexRef v2 = he2->vertex();
+
+    // any vertices that have he1 or he2 as its halfedge should be changed
+    v1->halfedge() = he1->twin()->next();
+    v2->halfedge() = he2->twin()->next();
+
+    // any face that has he1 or he2 as its boundary halfedge should be changed
+    FaceRef face1 = he1->face();
+    face1->halfedge() = he1->next();
+    FaceRef face2 = he2->face();
+    face2->halfedge() = he2->next();
+
+    // Any faces that are triangles that include e should be deleted
+    delete_face_if_needed(face1, v2, he1);
+    delete_face_if_needed(face2, v1, he2);
+
+    // Delete halfedges he1 and he2 by making sure the next() that points to them points to other vertices
+    h1PrevFromV->twin()->next() = he1->next();
+    h2PrevFromV->twin()->next() = he2->next();
+
+    // delete the vertex with the smallest degree and have all of its half edges point to the other v
+    VertexRef smallerVertex = v1->degree() < v2->degree() ? v1 : v2;
+    VertexRef largerVertex = v1->degree() < v2->degree() ? v2 : v1;
+    HalfedgeRef h = smallerVertex->halfedge();
+    do {
+        h->vertex() = largerVertex;
+        h = h->twin()->next();
+    } while (h != smallerVertex->halfedge());
+
+    // Move the larger vertex to be in the middle of the edge
+    largerVertex->pos = e->center();
+
+    // Now we can safely delete the edge;
+    erase(e);
+    erase(he1);
+    erase(he2);
+    erase(smallerVertex);
+
+    return largerVertex;
 }
 
 /*
@@ -75,8 +173,66 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Mesh::FaceRef f) {
 
-    (void)f;
-    return std::nullopt;
+    // Create a new vertex, set its position and halfedge
+    VertexRef newV = new_vertex();
+    newV->pos = f->center();
+
+    // For every halfedge coming from vertices around f, reassign to come from newV
+    HalfedgeRef firstHeFromF = f->halfedge()->twin()->next();
+    HalfedgeRef tempHe = firstHeFromF;
+    bool newFirstHe = false; // whether or not firstHeFromF was deleted
+    do {
+        if (newFirstHe) {
+            firstHeFromF = tempHe;
+            newFirstHe = false;
+        }
+
+        HalfedgeRef nextHe = tempHe->twin()->next();
+        if (nextHe->twin()->face() == f) {
+            nextHe = nextHe->next();
+        }
+        HalfedgeRef prevBeforeLastHe = tempHe;
+        HalfedgeRef lastHe = tempHe;
+        while (lastHe->next() != tempHe) {
+            prevBeforeLastHe = lastHe;
+            lastHe = lastHe->next();
+        }
+
+        if (lastHe->twin()->face() == f) {
+            // delete halfedge that lies on an edge on F
+
+            if (tempHe->face()->degree() == 3) {
+                if (tempHe == firstHeFromF) {
+                    newFirstHe = true; // will need a new loop ending
+                }
+                // a triangle adjacent to f, should be deleted
+                delete_face_if_needed(tempHe->face(), tempHe->vertex(), lastHe);
+            } else {
+                // non-triangle adjacent to f, only delete halfedge lastHe
+                prevBeforeLastHe->next() = tempHe;
+                tempHe->vertex() = newV;
+            }
+            erase(lastHe);
+        } else {
+            tempHe->vertex() = newV;
+        }
+        tempHe = nextHe;
+    } while (tempHe != firstHeFromF);
+
+    // delete every he on face as well as its V & E
+    tempHe = f->halfedge();
+    for (unsigned int i = 0; i < f->degree(); i++) {
+        HalfedgeRef nextHe = tempHe->next();
+        erase(tempHe->vertex());
+        erase(tempHe->edge());
+        erase(tempHe);
+        tempHe = nextHe;
+    }
+
+    newV->halfedge() = firstHeFromF;
+    erase(f);
+
+    return newV;
 }
 
 /*
@@ -84,9 +240,42 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Me
     flipped edge.
 */
 std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::EdgeRef e) {
+    // get the halfedges and the faces on either side of e
+    HalfedgeRef he1 = e->halfedge();
+    FaceRef f1 = he1->face();
+    HalfedgeRef he2 = he1->twin();
+    FaceRef f2 = he2->face();
+    // reassign vertex halfedges in case any point at he1/he2
+    he1->vertex()->halfedge() = he2->next();
+    he2->vertex()->halfedge() = he1->next();
 
-    (void)e;
-    return std::nullopt;
+    // get the rest of the halfedges
+    HalfedgeRef he1Next = he1->next();
+    HalfedgeRef he1Next2 = he1Next->next();
+    HalfedgeRef he2Next = he2->next();
+    HalfedgeRef he2Next2 = he2Next->next();
+
+    // reassign halfedges to the faces
+    // face 1: connect he1 with he2Next2 with he1Next, connect he1 with he1Next2's vertex
+    he1->next() = he2Next2;
+    he1->face() = f1;
+    he2Next2->next() = he1Next;
+    he2Next2->face() = f1;
+    he1Next->next() = he1;
+    he1Next->face() = f1;
+    he1->vertex() = he1Next2->vertex();
+    f1->halfedge() = he1;
+    // face2: same as face 1 but use 1 instead of 2 and vice versa
+    he2->next() = he1Next2;
+    he2->face() = f2;
+    he1Next2->next() = he2Next;
+    he1Next2->face() = f2;
+    he2Next->next() = he2;
+    he2Next->face() = f2;
+    he2->vertex() = he2Next2->vertex();
+    f2->halfedge() = he2;
+
+    return e;
 }
 
 /*
@@ -95,9 +284,91 @@ std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::Ed
     the edge that was split, rather than the new edges.
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(Halfedge_Mesh::EdgeRef e) {
+    // painting the picture: right now it looks like <|>, we'll make it <+>
+    // the variable naming assumes a vertical edge and CCW direction but should work no matter the setup
 
-    (void)e;
-    return std::nullopt;
+    // get the halfedges and the faces on either side of e
+    // arbitrarily assigning the current edge to be the "top edge" coming out of the new vertex
+    HalfedgeRef heNorthLeft = e->halfedge();
+    FaceRef fTopLeft = heNorthLeft->face();
+    HalfedgeRef heNorthRight = heNorthLeft->twin();
+    FaceRef fTopRight = heNorthRight->face();
+
+    // make a vertex, two new faces
+    FaceRef fBottomLeft = new_face();
+    FaceRef fBottomRight = new_face();
+    VertexRef newV = new_vertex();
+    newV->halfedge() = heNorthLeft;
+    newV->pos = e->center();
+
+    // do the left side first
+    HalfedgeRef heNorthwest= heNorthLeft->next();
+    HalfedgeRef heSouthwest = heNorthwest->next();
+    HalfedgeRef heSouthLeft = new_halfedge();
+    // new edge and new halfedges
+    EdgeRef eLeft = new_edge();
+    HalfedgeRef heWestUpper = new_halfedge();
+    HalfedgeRef heWestLower = new_halfedge();
+    heWestUpper->twin() = heWestLower;
+    heWestLower->twin() = heWestUpper;
+    heWestUpper->edge() = eLeft;
+    heWestLower->edge() = eLeft;
+    eLeft->halfedge() = heWestUpper;
+    // Lower left triangle
+    heSouthLeft->vertex() = heNorthLeft->vertex();
+    heSouthLeft->next() = heWestLower;
+    heSouthLeft->face() = fBottomLeft;
+    heWestLower->vertex() = newV;
+    heWestLower->next() = heSouthwest;
+    heWestLower->face() = fBottomLeft;
+    heSouthwest->next() = heSouthLeft;
+    heSouthwest->face() = fBottomLeft;
+    fBottomLeft->halfedge() = heSouthLeft;
+    // Upper left triangle
+    heNorthLeft->vertex() = newV;
+    heNorthwest->next() = heWestUpper;
+    heWestUpper->next() = heNorthLeft;
+    heWestUpper->face() = fTopLeft;
+    heWestUpper->vertex() = heSouthwest->vertex();
+    fTopLeft->halfedge() = heNorthLeft;
+
+    // next, the right half
+    HalfedgeRef heSoutheast = heNorthRight->next();
+    HalfedgeRef heNortheast = heSoutheast->next();
+    HalfedgeRef heSouthRight = new_halfedge();
+    heSouthRight->twin() = heSouthLeft;
+    heSouthLeft->twin() = heSouthRight;
+    EdgeRef eBottom = new_edge();
+    eBottom->halfedge() = heSouthLeft;
+    heSouthLeft->edge() = eBottom;
+    heSouthRight->edge() = eBottom;
+    // new edge and halfedges
+    EdgeRef eRight = new_edge();
+    HalfedgeRef heEastUpper = new_halfedge();
+    HalfedgeRef heEastLower = new_halfedge();
+    heEastUpper->twin() = heEastLower;
+    heEastLower->twin() = heEastUpper;
+    heEastUpper->edge() = eRight;
+    heEastLower->edge() = eRight;
+    eRight->halfedge() = heEastUpper;
+    // Lower right triangle
+    heSouthRight->vertex() = newV;
+    heSouthRight->next() = heSoutheast;
+    heSouthRight->face() = fBottomRight;
+    heSoutheast->next() = heEastLower;
+    heSoutheast->face() = fBottomRight;
+    heEastLower->vertex() = heNortheast->vertex();
+    heEastLower->next() = heSouthRight;
+    heEastLower->face() = fBottomRight;
+    fBottomRight->halfedge() = heSouthRight;
+    // Upper right triangle
+    heNorthRight->next() = heEastUpper;
+    heEastUpper->vertex() = newV;
+    heEastUpper->next() = heNortheast;
+    heEastUpper->face() = fTopRight;
+    fTopRight->halfedge() = heNorthRight;
+
+    return newV;
 }
 
 /* Note on the beveling process:
