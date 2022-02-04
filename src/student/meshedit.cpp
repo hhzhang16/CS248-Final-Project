@@ -32,6 +32,17 @@
 */
 
 /*
+    This helper function finds and returns the halfedge whose next pointer points to the current halfedge
+*/
+Halfedge_Mesh::HalfedgeRef Halfedge_Mesh::find_prev_halfedge(Halfedge_Mesh::HalfedgeRef first) {
+    HalfedgeRef prev = first;
+    while (prev->next() != first) {
+        prev = prev->next();
+    }
+    return prev;
+}
+
+/*
     This method should replace the given vertex and all its neighboring
     edges and faces with a single face, returning the new face.
  */
@@ -48,16 +59,41 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_vertex(Halfedge_Mesh:
 std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::EdgeRef e) {
 
     // get the half edges
-    HalfEdgeRef halfedge1 = e.halfedge();
-    HalfEdgeRef halfedge2 = halfedge1.twin();
+    HalfedgeRef he1 = e->halfedge();
+    HalfedgeRef he2 = he1->twin();
 
     // get the 2 vertices attached to this edge
-    VertexRef v1 = halfedge1.vertex();
-    VertexRef v2 = halfedge2.vertex();
+    VertexRef v1 = he1->vertex();
+    VertexRef v2 = he2->vertex();
+    v1->halfedge() = he1->twin()->next();
+    v2->halfedge() = he2->twin()->next();
 
-    // delete one vertex at a time
-    FaceRef newFace1 = erase_vertex(v1);
-    return erase_vertex(v2);
+    // get the previous half-edges
+    HalfedgeRef he1Prev = find_prev_halfedge(he1);
+    HalfedgeRef he2Prev = find_prev_halfedge(he2);
+
+    // Arbitrarily choose to keep he1's face
+    HalfedgeRef he1Next = he1->next();
+    HalfedgeRef he2Next = he2->next();
+    FaceRef f1 = he1->face();
+    f1->halfedge() = he1Next;
+    FaceRef f2 = he2->face();
+
+    he1Prev->next() = he2Next;
+    he2Prev->next() = he1Next;
+
+    // for each edge that used to be part of face2, reassign to face1
+    HalfedgeRef temp = he2Next;
+    while (temp != he1Next) {
+        temp->face() = f1;
+        temp = temp->next();
+    }
+
+    erase(e);
+    erase(he1);
+    erase(he2);
+    erase(f2);
+    return f1;
 }
 
 /* 
@@ -97,17 +133,6 @@ void Halfedge_Mesh::delete_face_if_needed(Halfedge_Mesh::FaceRef f,
         erase(toDelete2);
         erase(f);
     }
-}
-
-/*
-    This helper function finds and returns the halfedge whose next pointer points to the current halfedge
-*/
-Halfedge_Mesh::HalfedgeRef Halfedge_Mesh::find_prev_halfedge(Halfedge_Mesh::HalfedgeRef first) {
-    HalfedgeRef prev = first;
-    while (prev->next() != first) {
-        prev = prev->next();
-    }
-    return prev;
 }
 
 /*
@@ -210,6 +235,7 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Me
             } else {
                 // non-triangle adjacent to f, only delete halfedge lastHe
                 prevBeforeLastHe->next() = tempHe;
+                prevBeforeLastHe->face()->halfedge() = prevBeforeLastHe;
                 tempHe->vertex() = newV;
             }
             erase(lastHe);
