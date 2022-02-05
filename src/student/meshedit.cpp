@@ -745,8 +745,32 @@ void Halfedge_Mesh::loop_subdivide() {
     // the Loop subdivision rule, and store them in Vertex::new_pos.
     // -> At this point, we also want to mark each vertex as being a vertex of the
     //    original mesh. Use Vertex::is_new for this.
+    for (VertexRef v = vertices_begin(); v != vertices_end(); v++) {
+        unsigned int n = v->degree();
+        float u = (n == 3) ? 3.0f / 16.0f : 3.0f / (8.0f * n);
+        v->new_pos = (1.0f - u * n) * v->pos;
+        
+        HalfedgeRef h = v->halfedge();
+        do {
+            VectorRef neighbor = h->twin()->vertex();
+            v->new_pos += u / n * neighbor->pos();
+            h = h->twin()->next();
+        } while(h != v->halfedge());
+
+        v->is_new = false;
+    }
     // -> Next, compute the updated vertex positions associated with edges, and
     //    store it in Edge::new_pos.
+    for (EdgeRef e = edges_begin(); e != edges_end(); e++) {
+        HalfedgeRef he1 = e->halfedge();
+        HalfedgeRef he2 = he1->twin();
+        VertexRef v1 = he1->vertex();
+        VertexRef v2 = he2->vertex();
+        VertexRef oppositeV1 = he1->next()->next()->vertex();
+        VertexRef oppositeV2 = he2->next()->next()->vertex();
+
+        e->new_pos = 3.0f/8.0f * (v1->pos + v2->pos) + 1.0f/8.0f * (oppositeV1->pos + oppositeV2->pos);
+    }
     // -> Next, we're going to split every edge in the mesh, in any order.  For
     //    future reference, we're also going to store some information about which
     //    subdivided edges come from splitting an edge in the original mesh, and
@@ -754,6 +778,23 @@ void Halfedge_Mesh::loop_subdivide() {
     //    loop, we only want to iterate over edges of the original mesh.
     //    Otherwise, we'll end up splitting edges that we just split (and the
     //    loop will never end!)
+    // iterate over all edges in the mesh
+    int n = mesh.n_edges();
+    EdgeRef e = mesh.edges_begin();
+    for (int i = 0; i < n; i++) {
+
+        // get the next edge NOW!
+        EdgeRef nextEdge = e;
+        nextEdge++;
+
+        // now, even if splitting the edge deletes it...
+        if (some condition is met) {
+            mesh.split_edge(e);
+        }
+
+        // ...we still have a valid reference to the next edge.
+        e = nextEdge;
+    }
     // -> Now flip any new edge that connects an old and new vertex.
     // -> Finally, copy the new vertex positions into final Vertex::pos.
 
