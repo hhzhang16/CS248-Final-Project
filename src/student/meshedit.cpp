@@ -976,24 +976,26 @@ void Halfedge_Mesh::loop_subdivide() {
         HalfedgeRef h = v->halfedge();
         do {
             VertexRef neighbor = h->twin()->vertex();
-            v->new_pos += u / n * neighbor->pos();
+            v->new_pos += u * neighbor->pos;
             h = h->twin()->next();
         } while(h != v->halfedge());
 
         v->is_new = false;
     }
+
     // -> Next, compute the updated vertex positions associated with edges, and
     //    store it in Edge::new_pos.
     for (EdgeRef e = edges_begin(); e != edges_end(); e++) {
         HalfedgeRef he1 = e->halfedge();
         HalfedgeRef he2 = he1->twin();
-        VertexRef v1 = he1->vertex();
-        VertexRef v2 = he2->vertex();
-        VertexRef oppositeV1 = he1->next()->next()->vertex();
-        VertexRef oppositeV2 = he2->next()->next()->vertex();
+        Vec3 v1Pos = he1->vertex()->pos;
+        Vec3 v2Pos = he2->vertex()->pos;
+        Vec3 oppositeV1Pos = he1->next()->next()->vertex()->pos;
+        Vec3 oppositeV2Pos = he2->next()->next()->vertex()->pos;
 
-        e->new_pos = 3.0f/8.0f * (v1->pos + v2->pos) + 1.0f/8.0f * (oppositeV1->pos + oppositeV2->pos);
+        e->new_pos = 3.0f/8.0f * (v1Pos + v2Pos) + 1.0f/8.0f * (oppositeV1Pos + oppositeV2Pos);
     }
+
     // -> Next, we're going to split every edge in the mesh, in any order.  For
     //    future reference, we're also going to store some information about which
     //    subdivided edges come from splitting an edge in the original mesh, and
@@ -1011,16 +1013,52 @@ void Halfedge_Mesh::loop_subdivide() {
         nextEdge++;
 
         // now, even if splitting the edge deletes it...
-        if (some condition is met) {
-            
-            split_edge(e);
+        std::optional<VertexRef> potentialSplitV = split_edge(e);
+        if (potentialSplitV.has_value()) {
+            VertexRef newV = potentialSplitV.value();
+            newV->is_new = true;
+
+            // set the new edges to be new
+            HalfedgeRef h = newV->halfedge();
+            if (h->twin()->next()->edge() != e && h->next()->next()->edge() != e) {
+                h = h->twin()->next();
+            }
+            h->edge()->is_new = true;
+            h->twin()->next()->twin()->next()->edge()->is_new = true;
         }
 
         // ...we still have a valid reference to the next edge.
         e = nextEdge;
     }
+
     // -> Now flip any new edge that connects an old and new vertex.
+    int newN = n_edges();
+    // e should be at the old edges_end(), where we left off
+    for (int i = 0; i < newN - n; i++) {
+        VertexRef endpoint1 = e->halfedge()->vertex();
+        VertexRef endpoint2 = e->halfedge()->twin()->vertex();
+        if (e->is_new && (endpoint1->is_new != endpoint2->is_new)) {
+            flip_edge(e);
+        }
+        e++;
+    }
+
     // -> Finally, copy the new vertex positions into final Vertex::pos.
+    // old vertices
+    for (VertexRef v = vertices_begin(); v != vertices_end(); v++) {
+        if (!v->is_new) {
+            v->pos = v->new_pos;
+        }
+    }
+    // new vertices
+    e = edges_begin();
+    for (int i = 0; i < n; i++) {
+        if (e->halfedge()->vertex()->is_new) {
+            e->halfedge()->vertex()->pos = e->new_pos;
+        } else {
+            e->halfedge()->twin()->vertex()->pos = e->new_pos;
+        }
+    }
 
     // Each vertex and edge of the original surface can be associated with a
     // vertex in the new (subdivided) surface.
