@@ -686,10 +686,35 @@ void Halfedge_Mesh::catmullclark_subdivide_positions() {
     // rules. (These rules are outlined in the Developer Manual.)
 
     // Faces
+    for (FaceRef f = faces_begin(); f != faces_end(); f++) {
+        f->new_pos = f->center();
+    }
 
     // Edges
+    for (EdgeRef e = edges_begin(); e != edges_end(); e++) {
+        Vec3 face1Pos = e->halfedge()->face()->new_pos;
+        Vec3 face2Pos = e->halfedge()->twin()->face()->new_pos;
+        e->new_pos = (2 * e->center() + face1Pos + face2Pos) / 4;
+    }
 
     // Vertices
+    for (VertexRef v = vertices_begin(); v != vertices_end(); v++) {
+        unsigned int n = v->degree();
+        // Q is the average of all new face position for faces containing v
+        Vec3 Q;
+        // R is the average of all original edge midpoints for edges containing v
+        Vec3 R;
+        HalfedgeRef h = v->halfedge();
+        do {
+            Q += h->face()->new_pos / n;
+            R += h->edge()->center() / n;
+            h = h->twin()->next();
+        } while(h != v->halfedge());
+
+        // S is the original vertex position for vertex v
+        Vec3 S = v->pos;
+        v->new_pos = (Q + 2 * R + (n - 3) * S) / n;
+    }
 }
 
 /*
