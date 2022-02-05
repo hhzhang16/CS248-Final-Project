@@ -146,6 +146,12 @@ void Halfedge_Mesh::delete_face_if_needed(Halfedge_Mesh::FaceRef f,
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Mesh::EdgeRef e) {
 
+    // if e is a boundary edge, nothing happens 
+    // TODO need to change this
+    if (e->on_boundary()) {
+        return std::nullopt;
+    }
+
     // get the half edges
     HalfedgeRef he1 = e->halfedge();
     HalfedgeRef he2 = he1->twin();
@@ -202,6 +208,12 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
     the new vertex created by the collapse.
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Mesh::FaceRef f) {
+    
+    // if f is a boundary face, nothing happens
+    // TODO: add support for boundary
+    if (f->is_boundary()) {
+        return std::nullopt;
+    }
 
     // Create a new vertex, set its position and halfedge
     VertexRef newV = new_vertex();
@@ -316,6 +328,12 @@ std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::Ed
     the edge that was split, rather than the new edges.
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(Halfedge_Mesh::EdgeRef e) {
+
+    // if e is a boundary edge, nothing happens
+    if (e->on_boundary()) {
+        return std::nullopt;
+    }
+
     // painting the picture: right now it looks like <|>, we'll make it <+>
     // the variable naming assumes a vertical edge and CCW direction but should work no matter the setup
 
