@@ -350,6 +350,23 @@ public:
             return _id;
         }
 
+        // user-defined function.
+        std::optional<HalfedgeRef> FindHalfedgeOnFace(const FaceRef f) const
+            {
+                HalfedgeRef h_edge = _halfedge;
+                const HalfedgeRef init_halfedge = _halfedge;
+                do
+                {
+                    if(h_edge->face()->id() == f->id())
+                        return h_edge;
+
+                    h_edge = h_edge->twin()->next();
+                } while(h_edge != init_halfedge);
+
+                printf("Returning Null :(\n");
+                return std::nullopt;
+            }
+
         // The vertex position
         Vec3 pos;
 
@@ -433,6 +450,16 @@ public:
 
     class Halfedge {
     public:
+        void AssignHalfedge(HalfedgeRef twin, HalfedgeRef next,
+                            VertexRef vr, EdgeRef er, FaceRef face)
+            {
+                _twin = twin;
+                _next = next;
+                _vertex=  vr;
+                _edge = er;
+                _face = face;
+            }
+
         // Retrives the twin halfedge
         HalfedgeRef& twin() {
             return _twin;

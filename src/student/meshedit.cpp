@@ -487,14 +487,236 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_edge(Halfedge_Mesh::E
     positions. These positions will be updated in
     Halfedge_Mesh::bevel_face_positions (which you also have to
     implement!)
+
+    Suggestion: For next time, I recommend the teaching staff define custom
+     'iterators' for the 'half-edges'. It'd go a long way to improving the
+     quality of the code created.
 */
-std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_face(Halfedge_Mesh::FaceRef f) {
+std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_face(Halfedge_Mesh::FaceRef face)
+{
+    // Defines a pair of vertices where the 'from' vertex has a half-edge
+    // pointing to 'to'.
+    struct VertexPair { VertexRef from; VertexRef to; };
 
-    // Reminder: You should set the positions of new vertices (v->pos) to be exactly
-    // the same as wherever they "started from."
+    // Defines the information we need to perform operations on the side of a
+    // beveled face.
+    struct BevelSide
+    {
+        // Constructor creates:
+        // 1. New face
+        // 2. Edge corresponding to the link between old_.from and new_.from
+        // 3. Three halfedges (the fourth one that completes the rectangle loop is
+        // already in the mesh between old_.from and old_.to). 
+        BevelSide(Halfedge_Mesh& hm, HalfedgeRef old_halfedge, VertexPair old_, VertexPair new_)
+            {
+                old_verts = old_;
+                new_verts = new_;
 
-    (void)f;
-    return std::nullopt;
+                side_face = hm.new_face();
+                side_edge = hm.new_edge();
+
+                // Let the "First" halfedge be the existing halfedge between the
+                // vertices in old_pair
+                halfedges[0] = old_halfedge;
+                halfedges[0]->face() = side_face;
+
+                // Generate the rest of the halfedges.
+                for(size_t i = 1; i < halfedges.size(); i++)
+                {
+                    halfedges[i] = hm.new_halfedge();
+                    halfedges[i]->_face = side_face;
+
+                    // Note: Don't assign edges to half-edges; at this point, we
+                    // don't have enough information to know which halfedge
+                    // corresponds to which edge.
+                }
+                side_face->_halfedge = halfedges[0];
+
+                // Assign vertices: Note that there's a halfedge from old_.to to
+                // new_.from and from new_.to and old_.from. 
+                halfedges[0]->vertex() = old_.from;
+                halfedges[1]->vertex() = old_.to;
+                halfedges[2]->vertex() = new_.from;
+                halfedges[3]->vertex() = new_.to;
+
+                // Link halfedges together.
+                for(size_t i = 0; i < halfedges.size(); i++)
+                {
+                    halfedges[i]->next() = halfedges[(i+1) % halfedges.size()];
+                }
+            }
+
+        // One edge/face per bevel side.
+        FaceRef side_face;
+        EdgeRef side_edge;
+
+        // Beveling creates three new half-edges on the 'inside' of each beveled
+        // face: The 'fourth' halfedge in the rectangle loop is the halfedge
+        // that already exists between old_verts.from and old_verts.to. This
+        // "existing edge" will be labeled as 'ExistingEdge', or 'E' in
+        // documentation.
+        //
+        // The ordering of the halfedges is:
+        // 1. E (halfedges[0]) -> halfedges[1]
+        // 2. halfedges[1] -> halfedges[2]
+        // 3. halfedges[2] -> halfedges[3]
+        // 4. halfedges[3] -> E (halfedges[0])
+        //
+        // Because of this ordering, the "twins" are as follows:
+        //  halfedges[0]: Unchanged
+        //  halfedges[1]: Next Side::halfedges[3] (last halfedge)
+        //  halfedges[2]: Corresponding inside halfedge
+        //  halfedges[3]: Prev Side::halfedges[1] (first created halfedge)
+        std::array<HalfedgeRef, 4> halfedges;
+
+        // Pair of vertices in the old face.
+        VertexPair old_verts;
+
+        // Pair of vertices in the 'new' face.
+        VertexPair new_verts;
+    };
+
+    struct BevelInside
+    {
+        BevelInside(Halfedge_Mesh& hm, const std::vector<VertexRef>& vertices)
+            {
+                const size_t N = vertices.size();
+                face = hm.new_face();
+
+                for(size_t i = 0; i < N; i++)
+                {
+                    edges.push_back(hm.new_edge());
+                    halfedges.push_back(hm.new_halfedge());
+
+                    halfedges[i]->_face = face;
+                    halfedges[i]->_edge = edges[i];
+                    edges[i]->halfedge() = halfedges[i];
+
+                    halfedges[i]->_vertex = vertices[i];
+                }
+                // Arbitrarily set the face's halfedge. 
+                face->halfedge() = halfedges[0];
+
+                // Create a loop with the created half-edges by linking their
+                // 'next' pointers.
+                //
+                // NOTE: The "twin" of each halfedge corresponds to an entry in
+                // the SideBevel::halfedges struct.
+                for(size_t i =0; i < N; i++)
+                {
+                    halfedges[i]->_next = halfedges[(i+1) % N];
+                }
+            }
+
+        FaceRef face;
+
+        // "Inside edges" that form a loop around the face.
+        std::vector<EdgeRef> edges;
+        std::vector<HalfedgeRef> halfedges;
+    };
+
+    // Pseudocode:
+    //
+    // This function operates in several phases:
+    // Phase 1: Collect vertices on current face, and create N new vertices
+    // Phase 2: Create the N side-faces corresponding to the bevel.
+    // Phase 3: Wire the edges and half-edges of the side-faces
+    // Phase 4: Create edges and half-edges for the newly created "inside" face.
+    // Phase 5: Wire the half-edges for the "inside" face and the half-edges for
+    //          the "side" face.
+    
+
+    // Phase 1: Collect vertices on current face, and create N new vertices.
+    // Each vertex in the 'inside' face corresponds to one in the original
+    // 'outside' face. 
+    std::vector<VertexRef> beveled_vertices;
+    std::vector<VertexRef> original_vertices;
+    std::vector<HalfedgeRef> original_halfedges;
+
+    const HalfedgeRef init_edge = face->halfedge();
+    auto edge_iter = init_edge;
+    do {
+        VertexRef curr_vertex = edge_iter->vertex();
+
+        // Reminder: You should set the positions of new vertices (v->pos) to be
+        // exactly the same as wherever they "started from."
+        VertexRef created_vertex = new_vertex();
+        created_vertex->pos = curr_vertex->pos;
+
+        beveled_vertices.push_back(created_vertex);
+        original_vertices.push_back(edge_iter->vertex());
+        original_halfedges.push_back(*curr_vertex->FindHalfedgeOnFace(face));
+
+        edge_iter = edge_iter->next();
+    } while(edge_iter != init_edge);
+
+    const size_t n_vertices = beveled_vertices.size();
+
+    // Phase 2:Create edges and half-edges for the newly created "inside" face.
+    // Create one BevelSide per vertex, each element represents a "side" face of
+    // the bevel created. 
+    std::vector<BevelSide> bevel_sides;
+    for(size_t k = 0; k < n_vertices; k++)
+    {
+        // If there's a link between vertices i and j in the old face, then
+        // there will be a link between j and i in a beveled (side) face. (draw
+        // a rectangle with clockwise arrows to convince yourself. Opposite
+        // sides have arrows pointing in opposite directions).
+        size_t i = k;
+
+        // "Next" vertex, including wrap-around.
+        size_t j = (i + 1) % n_vertices;
+        VertexPair old_pair{
+            .from = original_vertices[i],
+            .to = original_vertices[j]
+        };
+
+        VertexPair new_pair{
+            .from = beveled_vertices[j],
+            .to = beveled_vertices[i]
+        };
+
+        bevel_sides.push_back(BevelSide(*this, original_halfedges[i],
+                                        old_pair, new_pair));
+    }
+
+    // Phase 4: Create edges and half-edges for the newly created "inside" face.
+    // One half-edge per inside face vertex.
+    BevelInside bevel_inside(*this, beveled_vertices);
+    for(size_t i = 0; i < n_vertices; i++)
+    {
+        beveled_vertices[i]->_halfedge = bevel_inside.halfedges[i];
+    }
+
+    // Phase 3:  Wire the edges and half-edges of the side-faces
+    for(size_t i = 0; i < n_vertices; i++)
+    {
+        BevelSide& curr_side = bevel_sides[i];
+        BevelSide& prev_side = bevel_sides[(i + n_vertices - 1) % n_vertices];
+        BevelSide& next_side = bevel_sides[(i + 1) % n_vertices];
+
+        // Wire Twins.
+        curr_side.halfedges[1]->twin() = next_side.halfedges[3];
+        curr_side.halfedges[2]->twin() = bevel_inside.halfedges[i];
+        curr_side.halfedges[3]->twin() = prev_side.halfedges[1];
+
+        // Wire edges.
+        curr_side.halfedges[1]->edge() = next_side.side_edge;
+        curr_side.halfedges[2]->edge() = bevel_inside.edges[i];
+        curr_side.halfedges[3]->edge() = curr_side.side_edge;
+
+        // Assign edge. 
+        curr_side.side_edge->halfedge() = curr_side.halfedges[3];
+    }
+
+    // Phase 5: Wire the half-edges for the "inside" face and the half-edges for
+    // the "side" face.
+    for(size_t i = 0; i < n_vertices; i++)
+    {
+        bevel_inside.halfedges[i]->twin() = bevel_sides[i].halfedges[2];
+    }
+    erase(face);
+    return bevel_inside.face;
 }
 
 /*
@@ -581,7 +803,8 @@ void Halfedge_Mesh::bevel_edge_positions(const std::vector<Vec3>& start_position
     }
 */
 void Halfedge_Mesh::bevel_face_positions(const std::vector<Vec3>& start_positions,
-                                         Halfedge_Mesh::FaceRef face, float tangent_offset,
+                                         Halfedge_Mesh::FaceRef face,
+                                         float tangent_offset,
                                          float normal_offset) {
 
     if(flip_orientation) normal_offset = -normal_offset;
