@@ -752,7 +752,7 @@ void Halfedge_Mesh::loop_subdivide() {
         
         HalfedgeRef h = v->halfedge();
         do {
-            VectorRef neighbor = h->twin()->vertex();
+            VertexRef neighbor = h->twin()->vertex();
             v->new_pos += u / n * neighbor->pos();
             h = h->twin()->next();
         } while(h != v->halfedge());
@@ -779,8 +779,8 @@ void Halfedge_Mesh::loop_subdivide() {
     //    Otherwise, we'll end up splitting edges that we just split (and the
     //    loop will never end!)
     // iterate over all edges in the mesh
-    int n = mesh.n_edges();
-    EdgeRef e = mesh.edges_begin();
+    int n = n_edges();
+    EdgeRef e = edges_begin();
     for (int i = 0; i < n; i++) {
 
         // get the next edge NOW!
@@ -789,7 +789,8 @@ void Halfedge_Mesh::loop_subdivide() {
 
         // now, even if splitting the edge deletes it...
         if (some condition is met) {
-            mesh.split_edge(e);
+            
+            split_edge(e);
         }
 
         // ...we still have a valid reference to the next edge.
