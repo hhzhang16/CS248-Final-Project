@@ -142,37 +142,44 @@ void Halfedge_Mesh::delete_face_if_needed(Halfedge_Mesh::FaceRef f,
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Mesh::EdgeRef e) {
 
-    // if e is a boundary edge, nothing happens 
-    // TODO need to change this
-    if (e->on_boundary()) {
-        return std::nullopt;
-    }
-
     // get the half edges
     HalfedgeRef he1 = e->halfedge();
     HalfedgeRef he2 = he1->twin();
+    bool boundaryCase = false;
+    if (he1->is_boundary()) {
+        if (he2->is_boundary()) {
+            return std::nullopt;
+        }
+        boundaryCase = true;
+        swap(he1, he2);
+    }
+
+    // any face that has he1 or he2 as its boundary halfedge should be changed
+    FaceRef face1 = he1->face();
+    face1->halfedge() = he1->next();
+    if (face1->degree() == 3 && he1->twin()->is_boundary() && he1->next()->twin()->is_boundary()
+        && he1->next()->next()->twin()->is_boundary()) {
+        // only a triangle left
+        return std::nullopt;
+    }
+    FaceRef face2 = he2->face();
+    face2->halfedge() = he2->next();
+
+    // get the 2 vertices attached to this edge
+    VertexRef v1 = he1->vertex();
+    VertexRef v2 = he2->vertex();
+    v1->halfedge() = he1->twin()->next();
+    v2->halfedge() = he2->twin()->next();
   
     // find the half edges before h1 and h2 that come from the same vertices
     HalfedgeRef h1PrevFromV = find_prev_halfedge(he1)->twin();
     HalfedgeRef h2PrevFromV = find_prev_halfedge(he2)->twin();
 
-    // get the 2 vertices attached to this edge
-    VertexRef v1 = he1->vertex();
-    VertexRef v2 = he2->vertex();
-
-    // any vertices that have he1 or he2 as its halfedge should be changed
-    v1->halfedge() = he1->twin()->next();
-    v2->halfedge() = he2->twin()->next();
-
-    // any face that has he1 or he2 as its boundary halfedge should be changed
-    FaceRef face1 = he1->face();
-    face1->halfedge() = he1->next();
-    FaceRef face2 = he2->face();
-    face2->halfedge() = he2->next();
-
     // Any faces that are triangles that include e should be deleted
     delete_face_if_needed(face1, v2, he1);
-    delete_face_if_needed(face2, v1, he2);
+    if (!boundaryCase) {
+        delete_face_if_needed(face2, v1, he2);
+    }
 
     // Delete halfedges he1 and he2 by making sure the next() that points to them points to other vertices
     h1PrevFromV->twin()->next() = he1->next();
