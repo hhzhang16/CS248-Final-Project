@@ -8,6 +8,7 @@ project(Cardinal3D VERSION 1.1
                  LANGUAGES CXX)
 
 set(CARDINAL3D_BUILD_REF false)
+set(CMAKE_CXX_FLAGS_DEBUG true)
 
 if(CARDINAL3D_BUILD_REF)
     add_definitions(-DCARDINAL3D_BUILD_REF)

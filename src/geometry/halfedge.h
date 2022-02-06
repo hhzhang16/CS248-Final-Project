@@ -286,6 +286,12 @@ public:
     void triangulate();
 
     /*
+     * Triangulates a single non-triangular face. Assumes 'face' is
+     * a non-triangular face.
+     */ 
+    void TriangulateFace(const FaceRef face);
+
+    /*
         Compute new vertex positions for a mesh that splits each polygon
         into quads (by inserting a vertex at the face midpoint and each
         of the edge midpoints).  The new vertex positions will be stored
@@ -363,7 +369,6 @@ public:
                     h_edge = h_edge->twin()->next();
                 } while(h_edge != init_halfedge);
 
-                printf("Returning Null :(\n");
                 return std::nullopt;
             }
 
@@ -661,6 +666,23 @@ public:
     /// Check if half-edge mesh is valid
     std::optional<std::pair<ElementRef, std::string>> validate();
     std::optional<std::pair<ElementRef, std::string>> warnings();
+
+    // Created student method:
+    // Given a halfedge, populate all of its member variables with the
+    // passed-in next, twin, face, vertex, and edge.
+    //
+    // Additionally, set the halfedge for the face, vertex, and edge to the
+    // halfedge he. This is useful, since oftentimes we'll forget to set one of
+    // these fields. 
+    void Wire(HalfedgeRef he, HalfedgeRef next, HalfedgeRef twin,
+              FaceRef face, VertexRef vertex, EdgeRef edge) const;
+
+    // Create a vector of length N of the given data type, calling the
+    // appropriate "new_*" method as needed
+    std::vector<HalfedgeRef> CreateHalfedges(size_t N);
+    std::vector<EdgeRef> CreateEdges(size_t N);
+    std::vector<VertexRef> CreateVertexes(size_t N);
+    std::vector<FaceRef> CreateFaces(size_t N);
 
     //////////////////////////////////////////////////////////////////////////////////////////
     // End methods students should use, begin internal methods - you don't need to use these
