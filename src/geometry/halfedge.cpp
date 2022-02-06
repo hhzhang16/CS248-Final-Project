@@ -400,11 +400,8 @@ std::optional<std::pair<Halfedge_Mesh::ElementRef, std::string>> Halfedge_Mesh::
 
         // Check whether each halfedge's next points to a unique halfedge
         if(permutation.find(h->next()) == permutation.end()) {
-            printf("Inserting h->next: (h, next) (%u, %u)\n", h->id(), h->next()->id());
             permutation.insert(h->next());
         } else {
-            printf("Multiple nexts point to: (%u -> %u)\n\n",
-                   h->id(), h->next()->id());
             return {{h->next(), "A halfedge is the next of multiple halfedges!"}};
         }
     }
