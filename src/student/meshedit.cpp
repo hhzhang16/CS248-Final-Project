@@ -213,7 +213,6 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Mesh::FaceRef f) {
     
     // if f is a boundary face, nothing happens
-    // TODO: add support for boundary
     if (f->is_boundary()) {
         return std::nullopt;
     }
@@ -246,7 +245,7 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Me
         if (lastHe->twin()->face() == f) {
             // delete halfedge that lies on an edge on F
 
-            if (tempHe->face()->degree() == 3) {
+            if (!tempHe->face()->is_boundary() && tempHe->face()->degree() == 3) {
                 if (tempHe == firstHeFromF) {
                     newFirstHe = true; // will need a new loop ending
                 }
