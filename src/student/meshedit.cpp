@@ -826,9 +826,214 @@ void Halfedge_Mesh::bevel_face_positions(const std::vector<Vec3>& start_position
     Splits all non-triangular faces into triangles.
 */
 void Halfedge_Mesh::triangulate() {
+    // Function that takes in a face and returns TRUE if the face is triangular
+    // (there are only three edges on the face). 
+    auto is_triangular =
+        [](const FaceRef& face){
+            static constexpr size_t N_HALFEDGES_IN_TRIANGLE = 3;
 
-    // For each face...
+            const HalfedgeRef init_halfedge = face->halfedge();
+            HalfedgeRef iter_halfedge = init_halfedge;
+            size_t num_halfedges = 0;
+            do
+            {
+                num_halfedges++;
+                iter_halfedge = iter_halfedge->next();
+            } while(iter_halfedge != init_halfedge);
+            return num_halfedges == N_HALFEDGES_IN_TRIANGLE;
+        };
+
+    // Return a vector of non-triangular faces.
+    std::vector<FaceRef> non_triangular_faces;
+    for(auto face_iter = faces_begin(); face_iter != faces_end(); face_iter++)
+        {
+            if(!is_triangular(face_iter))
+                non_triangular_faces.push_back(face_iter);
+        }
+
+
+    // For each face, convert to a triangle by using the "connect every vertex
+    // to a single vertex" method.
+    // size_t face_num = 0;
+    // std::for_each(non_triangular_faces.begin(), non_triangular_faces.end(),
+//                   [this, &face_num](FaceRef face) {
+//                       printf("Face #%zu | %u\n", ++face_num, face->id());
+//                       TriangulateFace(face); });
+    TriangulateFace(non_triangular_faces[0]);
 }
+
+#include <unistd.h>
+
+void Halfedge_Mesh::TriangulateFace(const FaceRef face)
+{
+    std::vector<HalfedgeRef> original_halfedges;
+    std::vector<VertexRef> original_verts;
+
+    HalfedgeRef halfedge_iter = face->halfedge();
+    const HalfedgeRef init_halfedge = face->halfedge();
+    do
+    {
+        original_halfedges.push_back(halfedge_iter);
+        original_verts.push_back(halfedge_iter->vertex());
+
+        halfedge_iter = halfedge_iter->next();
+    } while(halfedge_iter != init_halfedge);
+
+    printf("\n Original Halfedges: ");
+    for(size_t i = 0; i < original_halfedges.size(); i++)
+    {
+        printf("%u, ", original_halfedges[i]->id());
+    }
+    printf("\n");
+
+    const size_t N_Verts = original_verts.size();
+
+    // Number of faces remaining after triangulation operation. 
+    const size_t N_Faces = N_Verts - 2;
+    const size_t N_Edges = N_Faces - 1;
+
+    std::vector<FaceRef> new_faces = CreateFaces(N_Faces);
+
+    // Number of new edges.
+    std::vector<EdgeRef> new_edges = CreateEdges(N_Edges);
+    std::vector<HalfedgeRef> new_halfedges = CreateHalfedges(2 * N_Edges);
+
+    // Vertex from which all triangles will be created. 
+    const VertexRef base_vertex = original_verts[0];
+
+    printf("\nCreated faces, edges, and halfedges!\n");
+    // Make sets of three vertices. Each triple represents the vertices of a
+    // triangulated face.
+    std::vector<std::array<VertexRef, 3>> triangle_verts;
+    std::vector<std::array<HalfedgeRef, 3>> triangle_halfedges;
+    for(size_t i = 0; i < N_Faces ; i++)
+    {
+        std::array<VertexRef, 3> tri_verts;
+        tri_verts[0] = base_vertex;
+        tri_verts[1] = original_verts[i + 1];
+        tri_verts[2] = original_verts[i + 2];
+
+        printf("[%zu] Tri Verts: (%u, %u, %u)\n", i,
+               tri_verts[0]->id(),
+               tri_verts[1]->id(),
+               tri_verts[2]->id());
+
+        // Create the half-edges for this face. Special cases for the
+        // "outermost" triangles.
+        std::array<HalfedgeRef, 3> tri_halfedges;
+        if(i == 0)
+        {
+            printf("Case 1\n");
+            tri_halfedges[0] = original_halfedges[0];
+            tri_halfedges[1] = original_halfedges[1];
+            tri_halfedges[2] = new_halfedges[0];
+        }
+        else if(i == (N_Faces - 1))
+        {
+            printf("Case 3\n");
+            tri_halfedges[0] = new_halfedges[new_halfedges.size() - 1];
+            tri_halfedges[1] = original_halfedges[i + 1];
+            tri_halfedges[2] = original_halfedges[i + 2];
+        }
+        else
+        {
+            printf("Case 2\n");
+            // Each "inside" face has two halfedges, and the "+1" offset is
+            // because the first face uses one of the halfedges.
+            size_t base_halfedge_idx = (2 * i) - 1;
+            tri_halfedges[0] = new_halfedges[base_halfedge_idx];
+            tri_halfedges[1] = original_halfedges[i + 1];
+            tri_halfedges[2] = new_halfedges[base_halfedge_idx + 1];
+        }
+        triangle_halfedges.push_back(tri_halfedges);
+        // printf("Triangle halfedges\n");
+        // for(int j = 0; j < 3; j++)
+        // {
+        //     // printf("%u, ", triangle_halfedges[i][j]->id());
+        // }
+
+        triangle_verts.push_back(tri_verts);
+    }
+
+    printf("N Vert Triples: %zu\n", triangle_verts.size());
+
+    // For each face, link the appropriate vertices, half-edges, and so on.
+    for(size_t i = 0; i < N_Faces; i++)
+    {
+        printf("i = %zu\n", i);
+        std::array<HalfedgeRef, 3> halfedges = triangle_halfedges[i];
+        std::array<VertexRef, 3> tri_verts = triangle_verts[i];
+
+        FaceRef triangle_face = new_faces[i];
+        for(size_t j = 0 ;  j < halfedges.size(); j++)
+        {
+            halfedges[j]->face() = triangle_face;
+            halfedges[j]->next() = halfedges[((j+1)%3)];
+            printf("%u -> %u \n",
+                   halfedges[j]->id(),
+                   halfedges[j]->next()->id());
+        }
+        printf("\n");
+
+        if(i == 0)
+        {
+            // Wire second vertex's next halfedge to be the created halfedge.
+            VertexRef mid_vertex = tri_verts[1];
+            mid_vertex->halfedge()->next() = halfedges[2];
+
+            HalfedgeRef twin = triangle_halfedges[i+1][0];
+            printf("Calling 'Wire'\n");
+            Wire(halfedges[2], halfedges[0], twin,
+                 triangle_face, tri_verts[2], new_edges[0]);
+            printf("Wired successfully!\n");
+
+        }
+        else if(i == N_Faces - 1)
+        {
+            // Wire second vertex's next halfedge to be the created halfedge.
+            printf("Last Wiring!\n");
+            VertexRef last_vertex = tri_verts[2];
+            last_vertex->halfedge()->next() = halfedges[0];
+
+
+
+            HalfedgeRef twin = triangle_halfedges[i - 1][2];
+            Wire(halfedges[0], halfedges[1], twin,
+                 triangle_face, tri_verts[0], new_edges[i-1]);
+            printf("Done Wiring!\n");
+        }
+        else
+        {
+            // "Already established" halfedge is between tri_verts[1] and [2],
+            // so no wiring needs to occur there.
+            VertexRef base_vertex = tri_verts[0];
+            printf("Base Vertex (Id, HEdge Id): (%u, %u)\n",
+                   base_vertex->id(),
+                   base_vertex->halfedge()->id());
+
+            base_vertex->halfedge()->next() = halfedges[2];
+            HalfedgeRef first_twin = triangle_halfedges[i-1][2];
+            printf("Wire 1\n");
+            Wire(halfedges[0], halfedges[1], first_twin,
+                 triangle_face, tri_verts[0], new_edges[i-1]);
+
+            VertexRef last_vertex = tri_verts[2];
+            last_vertex->halfedge()->next() = halfedges[0];
+            printf("Last Vertex (Id, HEdge Id): (%u, %u)\n",
+                   last_vertex->id(),
+                   last_vertex->halfedge()->id());
+            printf("Wire 2\n");
+            HalfedgeRef second_twin = triangle_halfedges[i-1][2];
+
+            Wire(halfedges[2], halfedges[0], second_twin,
+                 triangle_face, tri_verts[2], new_edges[i]);
+            printf("Done wiring!\n");
+        }
+    }
+
+    erase(face);
+}
+
 
 /* Note on the quad subdivision process:
 
@@ -1178,4 +1383,80 @@ bool Halfedge_Mesh::simplify() {
     // You should use collapse_edge_erase() instead for the desired behavior.
 
     return false;
+}
+
+void Halfedge_Mesh::Wire(HalfedgeRef he, HalfedgeRef next, HalfedgeRef twin,
+                         FaceRef face, VertexRef vertex, EdgeRef edge) const
+{
+    printf("A\n");
+    // Assign halfedge values.
+    he->next() = next;
+    he->twin() = twin;
+    he->face() = face;
+    he->vertex() = vertex;
+    he->edge() = edge;
+    printf("B\n");
+    // Assign halfedge to the other elements.
+    twin->twin() = he;
+    face->halfedge() = he;
+    printf("C\n");
+    edge->halfedge() = he;
+    printf("D\n");
+    vertex->halfedge() = he;
+}
+
+
+std::vector<Halfedge_Mesh::HalfedgeRef> Halfedge_Mesh::CreateHalfedges(size_t N)
+{
+    std::vector<HalfedgeRef> halfedges;
+    halfedges.reserve(N);
+    for(size_t i = 0; i < N; i++)
+        halfedges.push_back(new_halfedge());
+
+    printf("\nPrinting Halfedges\n");
+    std::for_each(halfedges.cbegin(), halfedges.cend(),
+                  [](HalfedgeRef he){ printf("%u ", he->id()); });
+    printf("\n");
+    return halfedges;
+}
+
+std::vector<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::CreateEdges(size_t N)
+{
+    std::vector<EdgeRef> edges;
+    edges.reserve(N);
+    for(size_t i = 0; i < N; i++)
+        edges.push_back(new_edge());
+    printf("\nPrinting Edges\n");
+    std::for_each(edges.cbegin(), edges.cend(),
+                  [](EdgeRef he){ printf("%u ", he->id()); });
+    printf("\n");
+    return edges;
+}
+
+std::vector<Halfedge_Mesh::VertexRef> Halfedge_Mesh::CreateVertexes(size_t N)
+{
+    std::vector<VertexRef> vertices;
+    vertices.reserve(N);
+    for(size_t i = 0; i < N; i++)
+        vertices.push_back(new_vertex());
+
+    printf("\nPrinting Vertices\n");
+    std::for_each(vertices.cbegin(), vertices.cend(),
+                  [](VertexRef he){ printf("%u ", he->id()); });
+    printf("\n");
+    return vertices;
+}
+
+std::vector<Halfedge_Mesh::FaceRef> Halfedge_Mesh::CreateFaces(size_t N)
+{
+    std::vector<FaceRef> faces;
+    faces.reserve(N);
+    for(size_t i = 0; i < N; i++)
+        faces.push_back(new_face());
+    printf("\nPrinting Faces\n");
+    std::for_each(faces.cbegin(), faces.cend(),
+                  [](FaceRef he){ printf("%u ", he->id()); });
+    printf("\n");
+
+   return faces;
 }
