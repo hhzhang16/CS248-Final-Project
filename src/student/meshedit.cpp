@@ -116,11 +116,7 @@ void Halfedge_Mesh::delete_face_if_needed(Halfedge_Mesh::FaceRef f,
         if (v3->halfedge() == toDelete2) {
             v3->halfedge() = toDelete2->twin()->next();
         }
-
-        // if v has any of the to-deleted half edges as its halfedge, change it
-        if (v->halfedge() == toDelete1) {
-            v->halfedge() = toDelete1->twin()->next();
-        }
+        v->halfedge() = toDelete1->twin()->next();
 
         // change he->next bc toDelete1 will be deleted
         he->next() = toDelete1->twin()->next();
@@ -283,6 +279,11 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Me
     flipped edge.
 */
 std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::EdgeRef e) {
+    
+    // if e is a boundary edge, nothing happens
+    if (e->on_boundary()) {
+        return std::nullopt;
+    }
 
     // “rotated” around the face, in the sense that each endpoint moves to the next vertex
     // get the halfedges and the faces on either side of e
@@ -329,95 +330,87 @@ std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::Ed
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(Halfedge_Mesh::EdgeRef e) {
 
-    // if e is a boundary edge, nothing happens
-    if (e->on_boundary()) {
-        return std::nullopt;
-    }
-
     // painting the picture: right now it looks like <|>, we'll make it <+>
     // the variable naming assumes a vertical edge and CCW direction but should work no matter the setup
 
     // get the halfedges and the faces on either side of e
     // arbitrarily assigning the current edge to be the "top edge" coming out of the new vertex
     HalfedgeRef heNorthLeft = e->halfedge();
-    FaceRef fTopLeft = heNorthLeft->face();
     HalfedgeRef heNorthRight = heNorthLeft->twin();
+    if (heNorthLeft->is_boundary()) {
+        if (heNorthRight->is_boundary()) {
+            return std::nullopt;
+        }
+        swap(heNorthLeft, heNorthRight);
+    }
+    FaceRef fTopLeft = heNorthLeft->face();
     FaceRef fTopRight = heNorthRight->face();
+    if ((fTopLeft->degree() != 3 && !fTopLeft->is_boundary()) || (fTopRight->degree() != 3 && !fTopRight->is_boundary())) {
+        return std::nullopt;
+    }
+    VertexRef topV = heNorthRight->vertex();
+    VertexRef bottomV = heNorthLeft->vertex();
 
     // make a vertex, two new faces
     FaceRef fBottomLeft = new_face();
-    FaceRef fBottomRight = new_face();
     VertexRef newV = new_vertex();
     newV->halfedge() = heNorthLeft;
     newV->pos = e->center();
 
-    // do the left side first
+    // All the halfedges
     HalfedgeRef heNorthwest= heNorthLeft->next();
     HalfedgeRef heSouthwest = heNorthwest->next();
     HalfedgeRef heSouthLeft = new_halfedge();
-    // new edge and new halfedges
-    EdgeRef eLeft = new_edge();
+    HalfedgeRef heSouthRight = new_halfedge();
     HalfedgeRef heWestUpper = new_halfedge();
     HalfedgeRef heWestLower = new_halfedge();
-    heWestUpper->twin() = heWestLower;
-    heWestLower->twin() = heWestUpper;
-    heWestUpper->edge() = eLeft;
-    heWestLower->edge() = eLeft;
-    eLeft->halfedge() = heWestUpper;
-    // Lower left triangle
-    heSouthLeft->vertex() = heNorthLeft->vertex();
-    heSouthLeft->next() = heWestLower;
-    heSouthLeft->face() = fBottomLeft;
-    heWestLower->vertex() = newV;
-    heWestLower->next() = heSouthwest;
-    heWestLower->face() = fBottomLeft;
-    heSouthwest->next() = heSouthLeft;
-    heSouthwest->face() = fBottomLeft;
-    fBottomLeft->halfedge() = heSouthLeft;
-    // Upper left triangle
-    heNorthLeft->vertex() = newV;
-    heNorthwest->next() = heWestUpper;
-    heWestUpper->next() = heNorthLeft;
-    heWestUpper->face() = fTopLeft;
-    heWestUpper->vertex() = heSouthwest->vertex();
-    fTopLeft->halfedge() = heNorthLeft;
 
-    // next, the right half
-    HalfedgeRef heSoutheast = heNorthRight->next();
-    HalfedgeRef heNortheast = heSoutheast->next();
-    HalfedgeRef heSouthRight = new_halfedge();
-    heSouthRight->twin() = heSouthLeft;
-    heSouthLeft->twin() = heSouthRight;
-    EdgeRef eBottom = new_edge();
-    eBottom->halfedge() = heSouthLeft;
-    heSouthLeft->edge() = eBottom;
-    heSouthRight->edge() = eBottom;
-    // new edge and halfedges
-    EdgeRef eRight = new_edge();
-    HalfedgeRef heEastUpper = new_halfedge();
-    HalfedgeRef heEastLower = new_halfedge();
-    heEastUpper->twin() = heEastLower;
-    heEastLower->twin() = heEastUpper;
-    heEastUpper->edge() = eRight;
-    heEastLower->edge() = eRight;
-    eRight->halfedge() = heEastUpper;
-    // Lower right triangle
-    heSouthRight->vertex() = newV;
-    heSouthRight->next() = heSoutheast;
-    heSouthRight->face() = fBottomRight;
-    heSoutheast->next() = heEastLower;
-    heSoutheast->face() = fBottomRight;
-    heEastLower->vertex() = heNortheast->vertex();
-    heEastLower->next() = heSouthRight;
-    heEastLower->face() = fBottomRight;
-    fBottomRight->halfedge() = heSouthRight;
-    // Upper right triangle
-    heNorthRight->next() = heEastUpper;
-    heEastUpper->vertex() = newV;
-    heEastUpper->next() = heNortheast;
-    heEastUpper->face() = fTopRight;
+    // set face halfedges
+    fBottomLeft->halfedge() = heSouthLeft;
+    fTopLeft->halfedge() = heNorthLeft;
     fTopRight->halfedge() = heNorthRight;
 
+    // new edges and their halfedges
+    EdgeRef eLeft = new_edge();
+    EdgeRef eBottom = new_edge();
+
+    // do the left side first
+    eLeft->halfedge() = heWestUpper;
+    eBottom->halfedge() = heSouthLeft;
+    // Lower left triangle
+    heWestLower->set_neighbors(heSouthwest, heWestUpper, newV, eLeft, fBottomLeft);
+    heSouthwest->set_neighbors(heSouthLeft, heSouthwest->twin(), heSouthwest->vertex(), heSouthwest->edge(), fBottomLeft);
+    heSouthLeft->set_neighbors(heWestLower, heSouthRight, bottomV, eBottom, fBottomLeft);
+    bottomV->halfedge() = heSouthLeft;
+    // Upper left triangle
+    heWestUpper->set_neighbors(heNorthLeft, heWestLower, heSouthwest->vertex(), eLeft, fTopLeft);
+    heNorthLeft->set_neighbors(heNorthwest, heNorthRight, newV, e, fTopLeft);
+    heNorthwest->set_neighbors(heWestUpper, heNorthwest->twin(), heNorthwest->vertex(), heNorthwest->edge(), fTopLeft);
+
+    // next, the right half; this gets skipped if the edge is on a boundary
+    if (e->on_boundary()) {
+        heSouthRight->set_neighbors(heNorthRight->next(), heSouthLeft, newV, eBottom, fTopRight);
+        heNorthRight->set_neighbors(heSouthRight, heNorthLeft, topV, e, fTopRight);
+    } else {
+        FaceRef fBottomRight = new_face();
+        fBottomRight->halfedge() = heSouthRight;
+
+        HalfedgeRef heSoutheast = heNorthRight->next();
+        HalfedgeRef heNortheast = heSoutheast->next();
+        HalfedgeRef heEastUpper = new_halfedge();
+        HalfedgeRef heEastLower = new_halfedge();
+        EdgeRef eRight = new_edge();
+        eRight->halfedge() = heEastUpper;
+        // Lower right triangle
+        heEastLower->set_neighbors(heSouthRight, heEastUpper, heNortheast->vertex(), eRight, fBottomRight);
+        heSouthRight->set_neighbors(heSoutheast, heSouthLeft, newV, eBottom, fBottomRight);
+        heSoutheast->set_neighbors(heEastLower, heSoutheast->twin(), heSoutheast->vertex(), heSoutheast->edge(), fBottomRight);
+        // Upper right triangle
+        heEastUpper->set_neighbors(heNortheast, heEastLower, newV, eRight, fTopRight);
+        heNortheast->set_neighbors(heNorthRight, heNortheast->twin(), heNortheast->vertex(), heNortheast->edge(), fTopRight);
+        heNorthRight->set_neighbors(heEastUpper, heNorthLeft, topV, e, fTopRight);
+    }
+    
     return newV;
 }
 

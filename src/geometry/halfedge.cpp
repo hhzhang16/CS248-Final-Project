@@ -377,7 +377,6 @@ std::optional<std::pair<Halfedge_Mesh::ElementRef, std::string>> Halfedge_Mesh::
 
     std::set<HalfedgeRef> permutation;
 
-    printf("Passed check 1\n");
     // Check valid halfedge permutation
     for(HalfedgeRef h = halfedges_begin(); h != halfedges_end(); h++) {
 
@@ -393,7 +392,6 @@ std::optional<std::pair<Halfedge_Mesh::ElementRef, std::string>> Halfedge_Mesh::
             return {{h, "A live halfedge's vertex was erased!"}};
         }
         if(ferased.find(h->face()) != ferased.end()) {
-            printf("Halfedge: %u\t Face: %u\n", h->id(), h->face()->id());
             return {{h, "A live halfedge's face was erased!"}};
         }
         if(eerased.find(h->edge()) != eerased.end()) {
@@ -408,7 +406,6 @@ std::optional<std::pair<Halfedge_Mesh::ElementRef, std::string>> Halfedge_Mesh::
         }
     }
 
-    printf("Passed check 2\n");
     for(HalfedgeRef h = halfedges_begin(); h != halfedges_end(); h++) {
 
         if(herased.find(h) != herased.end()) continue;
@@ -427,11 +424,9 @@ std::optional<std::pair<Halfedge_Mesh::ElementRef, std::string>> Halfedge_Mesh::
         }
     }
 
-    printf("Passed check 3\n");
     // Check whether each halfedge incident on a vertex points to that vertex
     for(VertexRef v = vertices_begin(); v != vertices_end(); v++) {
 
-        printf("Vertex ID: %u\n", v->id());
         if(verased.find(v) != verased.end()) continue;
 
         HalfedgeRef h = v->halfedge();
@@ -447,28 +442,22 @@ std::optional<std::pair<Halfedge_Mesh::ElementRef, std::string>> Halfedge_Mesh::
         } while(h != v->halfedge());
     }
 
-    printf("Passed check 4\n");
 
     // Check whether each halfedge incident on an edge points to that edge
     for(EdgeRef e = edges_begin(); e != edges_end(); e++) {
-        printf("Edge ID: %u\n", e->id());
         if(eerased.find(e) != eerased.end()) continue;
 
         HalfedgeRef h = e->halfedge();
-        printf("Trying to dereference the edge's halfedge\n");
         if(herased.find(h) != herased.end()) {
             return {{e, "An edge's halfedge is erased!"}};
         }
-        printf("About to Enter while loop\n");
         do {
-            printf("halfedge id: %u\n", h->id());
             if(h->edge() != e) {
                 return {{h, "An edge's halfedge does not point to that edge!"}};
             }
             h = h->twin();
         } while(h != e->halfedge());
     }
-    printf("Passed check 5\n");
 
     // Check whether each halfedge incident on a face points to that face
     for(FaceRef f = faces_begin(); f != faces_end(); f++) {
@@ -487,7 +476,6 @@ std::optional<std::pair<Halfedge_Mesh::ElementRef, std::string>> Halfedge_Mesh::
             h = h->next();
         } while(h != f->halfedge());
     }
-    printf("Passed Check 6! You did it, Timmy!\n");
     do_erase();
     return std::nullopt;
 }
