@@ -363,10 +363,6 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(Halfedge_Mesh:
     EdgeRef eLeft = new_edge();
     EdgeRef eBottom = new_edge();
     EdgeRef eRight = new_edge();
-    // heWestUpper->twin() = heWestLower;
-    // heWestLower->twin() = heWestUpper;
-    // heWestUpper->edge() = eLeft;
-    // heWestLower->edge() = eLeft;
     // do the left side first
     eLeft->halfedge() = heWestUpper;
     eBottom->halfedge() = heSouthLeft;
@@ -375,60 +371,24 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(Halfedge_Mesh:
     heWestLower->set_neighbors(heSouthwest, heWestUpper, newV, eLeft, fBottomLeft);
     heSouthwest->set_neighbors(heSouthLeft, heSouthwest->twin(), heSouthwest->vertex(), heSouthwest->edge(), fBottomLeft);
     heSouthLeft->set_neighbors(heWestLower, heSouthRight, heSoutheast->vertex(), eBottom, fBottomLeft);
-    // heSouthLeft->vertex() = heNorthLeft->vertex();
-    // heSouthLeft->next() = heWestLower;
-    // heSouthLeft->face() = fBottomLeft;
-    // heWestLower->vertex() = newV;
-    // heWestLower->next() = heSouthwest;
-    // heWestLower->face() = fBottomLeft;
-    // heSouthwest->next() = heSouthLeft;
-    // heSouthwest->face() = fBottomLeft;
     fBottomLeft->halfedge() = heSouthLeft;
     // Upper left triangle
     heWestUpper->set_neighbors(heNorthLeft, heWestLower, heSouthwest->vertex(), eLeft, fTopLeft);
     heNorthLeft->set_neighbors(heNorthwest, heNorthRight, newV, e, fTopLeft);
     heNorthwest->set_neighbors(heWestUpper, heNorthwest->twin(), heNorthwest->vertex(), heNorthwest->edge(), fTopLeft);
-    // heNorthLeft->vertex() = newV;
-    // heNorthwest->next() = heWestUpper;
-    // heWestUpper->next() = heNorthLeft;
-    // heWestUpper->face() = fTopLeft;
-    // heWestUpper->vertex() = heSouthwest->vertex();
     fTopLeft->halfedge() = heNorthLeft;
 
     // next, the right half
-    // heSouthRight->twin() = heSouthLeft;
-    // heSouthLeft->twin() = heSouthRight;
-    // eBottom->halfedge() = heSouthLeft;
-    // heSouthLeft->edge() = eBottom;
-    // heSouthRight->edge() = eBottom;
-    // new edge and halfedges
-    // heEastUpper->twin() = heEastLower;
-    // heEastLower->twin() = heEastUpper;
-    // heEastUpper->edge() = eRight;
-    // heEastLower->edge() = eRight;
-    // eRight->halfedge() = heEastUpper;
     // Lower right triangle
-    // heSouthRight->vertex() = newV;
-    // heSouthRight->next() = heSoutheast;
-    // heSouthRight->face() = fBottomRight;
-    // heSoutheast->next() = heEastLower;
-    // heSoutheast->face() = fBottomRight;
-    // heEastLower->vertex() = heNortheast->vertex();
-    // heEastLower->next() = heSouthRight;
-    // heEastLower->face() = fBottomRight;
-    fBottomRight->halfedge() = heSouthRight;
     heEastLower->set_neighbors(heSouthRight, heEastUpper, heNortheast->vertex(), eRight, fBottomRight);
     heSouthRight->set_neighbors(heSoutheast, heSouthLeft, newV, eBottom, fBottomRight);
     heSoutheast->set_neighbors(heEastLower, heSoutheast->twin(), heSoutheast->vertex(), heSoutheast->edge(), fBottomRight);
+    fBottomRight->halfedge() = heSouthRight;
     // Upper right triangle
-    // heNorthRight->next() = heEastUpper;
-    // heEastUpper->vertex() = newV;
-    // heEastUpper->next() = heNortheast;
-    // heEastUpper->face() = fTopRight;
-    fTopRight->halfedge() = heNorthRight;
     heEastUpper->set_neighbors(heNortheast, heEastLower, newV, eRight, fTopRight);
     heNortheast->set_neighbors(heNorthRight, heNortheast->twin(), heNortheast->vertex(), heNortheast->edge(), fTopRight);
     heNorthRight->set_neighbors(heEastUpper, heNorthLeft, heNorthwest->vertex(), e, fTopRight);
+    fTopRight->halfedge() = heNorthRight;
 
     return newV;
 }
