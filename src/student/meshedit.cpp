@@ -1,8 +1,8 @@
-
 #include <queue>
 #include <set>
 #include <unordered_map>
 #include <iostream>
+#include <algorithm>
 
 #include "../geometry/halfedge.h"
 #include "debug.h"
@@ -63,6 +63,7 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::E
         return std::nullopt;
     }
 
+
     // get the half edges
     HalfedgeRef he1 = e->halfedge();
     HalfedgeRef he2 = he1->twin();
@@ -72,6 +73,32 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::E
     VertexRef v2 = he2->vertex();
     v1->halfedge() = he1->twin()->next();
     v2->halfedge() = he2->twin()->next();
+
+    std::set<VertexRef> v1_neighbors;
+    std::set<VertexRef> v2_neighbors;
+
+    auto get_neighbor_verts =
+        [](HalfedgeRef vertex_he, std::set<VertexRef>& neighbors)
+            {
+                HalfedgeRef iter = vertex_he;
+                do
+                {
+                    neighbors.insert(iter->vertex());
+                    iter = iter->twin()->next();
+                }while(iter != vertex_he);
+            };
+    get_neighbor_verts(v1->halfedge(), v1_neighbors);
+    get_neighbor_verts(v2->halfedge(), v2_neighbors);
+
+    std::set<VertexRef> intersection;
+    std::set_intersection(v1_neighbors.begin(), v1_neighbors.end(),
+                          v2_neighbors.begin(), v2_neighbors.end(),
+                          std::inserter(intersection, intersection.begin()));
+    if(intersection.size() > 2)
+    {
+        return std::nullopt;
+    }
+
 
     // get the previous half-edges
     HalfedgeRef he1Prev = find_prev_halfedge(he1);
@@ -153,6 +180,8 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
         boundaryCase = true;
         swap(he1, he2);
     }
+
+    // Heuristic: An edge to be collapsed must have exactly "two neighboring vertices"
 
     // any face that has he1 or he2 as its boundary halfedge should be changed
     FaceRef face1 = he1->face();
@@ -814,9 +843,31 @@ void Halfedge_Mesh::bevel_face_positions(const std::vector<Vec3>& start_position
         h = h->next();
     } while(h != face->halfedge());
 
-    (void)new_halfedges;
-    (void)start_positions;
-    (void)face;
+    Vec3 normal_offset_vec = -face->normal().normalize() * normal_offset;
+    Vec3 face_center = face->center();
+
+    for(size_t i = 0; i < start_positions.size(); i++)
+    {
+        HalfedgeRef h_edge = new_halfedges[i];
+        // Get the corresponding vertex and move calculate its new position.
+        VertexRef vertex = h_edge->vertex();
+        Vec3 new_pos = start_positions[i];
+
+
+        Vec3 difference_to_center = (face_center - new_pos);
+        Vec3 to_center = difference_to_center.normalize();
+
+        // Enforce a small radius that shal not be crossed when moving towards
+        // thet center.
+        // Vec3 tangent_offset_vec = (to_center * tangent_offset) + new_pos;
+        // Move in the direction of the face's normal vector.
+        new_pos += normal_offset_vec;
+        new_pos += (to_center * -tangent_offset);
+
+        vertex->pos = new_pos;
+    }
+
+
     (void)tangent_offset;
     (void)normal_offset;
 }
@@ -1261,12 +1312,37 @@ struct Edge_Record {
         : edge(e) {
 
         // Compute the combined quadric from the edge endpoints.
+        Halfedge_Mesh::VertexRef v1 = e->halfedge()->vertex();
+        Halfedge_Mesh::VertexRef v2 = e->halfedge()->twin()->vertex();
+
+        Mat4 v1_quadric = vertex_quadrics[v1];
+        Mat4 v2_quadric = vertex_quadrics[v2];
+
+        Mat4 total_quadric = v1_quadric + v2_quadric;
+        Mat4 A = total_quadric;
+        // For each column (first index), set the last row (2nd index) to 0
+        A[0][3]= 0;
+        A[1][3]= 0;
+        A[2][3]= 0;
+        // Set the last column equal to the 4th column of the identity matrix.
+        A[3] = Mat4::I[3];
+
         // -> Build the 3x3 linear system whose solution minimizes the quadric error
         //    associated with these two endpoints.
+        Vec4 last_col = total_quadric[3];
+        last_col *= -1;
+
+        Vec3 b = Vec3(last_col[0], last_col[1], last_col[2]);
+
         // -> Use this system to solve for the optimal position, and store it in
         //    Edge_Record::optimal.
+        Vec3 x = A.inverse() * b;
+        optimal = x;
+
+        Vec4 x_homo = Vec4(x, 1);
         // -> Also store the cost associated with collapsing this edge in
         //    Edge_Record::cost.
+        cost = dot(x_homo, total_quadric * x_homo);
     }
     Halfedge_Mesh::EdgeRef edge;
     Vec3 optimal;
@@ -1359,12 +1435,85 @@ template<class T> struct PQueue {
     std::set<T> queue;
 };
 
+static Mat4 ComputeQuadric(Halfedge_Mesh::FaceRef face)
+{
+    Vec3 normal = face->normal();
+    Vec3 pos = face->halfedge()->vertex()->pos;
+
+    float a = normal.x;
+    float b = normal.y;
+    float c = normal.z;
+    float d = -1 * dot(normal, pos);
+
+    float letters[4] = {a, b, c, d};
+    Mat4 result;
+    for(int row = 0; row < 4; row++)
+    {
+        for(int col = 0; col < 4; col++)
+        {
+            result[col][row] = letters[row] * letters[col];
+        }
+    }
+
+    return result;
+}
+
 /*
     Mesh simplification. Note that this function returns success in a similar
     manner to the local operations, except with only a boolean value.
     (e.g. you may want to return false if you can't simplify the mesh any
     further without destroying it.)
 */
+
+std::set<Halfedge_Mesh::EdgeRef>
+GetIncidentEdges(const Halfedge_Mesh::EdgeRef edge)
+{
+    using EdgeRef = Halfedge_Mesh::EdgeRef;
+    using VertexRef = Halfedge_Mesh::VertexRef;
+    using HalfedgeRef = Halfedge_Mesh::HalfedgeRef;
+
+    auto get_incident_edges_from_vertex =
+        [edge](VertexRef v, std::set<EdgeRef>& incident_edges) {
+            const HalfedgeRef init_halfedge = v->halfedge();
+            HalfedgeRef iter_halfedge = init_halfedge;
+            do{
+                if(iter_halfedge->edge() != edge)
+                {
+                    incident_edges.insert(iter_halfedge->edge());
+                }
+
+
+                iter_halfedge = iter_halfedge->twin()->next();
+            } while(iter_halfedge != init_halfedge);
+        };
+
+    std::set<EdgeRef> incident_edges;
+
+    printf("(Edge): %u\n", edge->id());
+
+    printf("(HalfEdge / Vertex): (%u, %u)\n",
+           edge->halfedge()->id(),
+           edge->halfedge()->vertex()->id()
+        );
+
+    VertexRef v1 = edge->halfedge()->vertex();
+    VertexRef v2 = edge->halfedge()->twin()->vertex();
+    get_incident_edges_from_vertex(v1, incident_edges);
+
+    printf("Printing incident edges (v1)\n");
+    for(auto edge: incident_edges)
+        printf("%u, ", edge->id());
+    printf("\n");
+
+    get_incident_edges_from_vertex(v2, incident_edges);
+    printf("Printing incident edges (v2)\n");
+    for(auto edge: incident_edges)
+        printf("%u, ", edge->id());
+    printf("\n");
+
+    return incident_edges;
+}
+
 bool Halfedge_Mesh::simplify() {
 
     std::unordered_map<VertexRef, Mat4> vertex_quadrics;
@@ -1372,29 +1521,130 @@ bool Halfedge_Mesh::simplify() {
     std::unordered_map<EdgeRef, Edge_Record> edge_records;
     PQueue<Edge_Record> edge_queue;
 
-    // Compute initial quadrics for each face by simply writing the plane equation
-    // for the face in homogeneous coordinates. These quadrics should be stored
-    // in face_quadrics
+    // Compute initial quadrics for each face by simply writing the plane
+    // equation for the face in homogeneous coordinates. These quadrics should
+    // be stored in face_quadrics
+    for(FaceRef face = faces_begin(); face != faces_end(); face++)
+    {
+        face_quadrics[face] = ComputeQuadric(face);
+    }
+
+
     // -> Compute an initial quadric for each vertex as the sum of the quadrics
     //    associated with the incident faces, storing it in vertex_quadrics
+    for(VertexRef vertex = vertices_begin(); vertex != vertices_end(); vertex++)
+    {
+        HalfedgeRef face_iter = vertex->halfedge();
+        const HalfedgeRef init_halfedge = vertex->halfedge();
+
+        Mat4 total_vertex_quadric = {};
+        do
+        {
+            FaceRef incident_face = face_iter->face();
+            total_vertex_quadric += face_quadrics.at(incident_face);
+            face_iter = face_iter->twin()->next();
+        } while(face_iter != init_halfedge);
+
+        vertex_quadrics[vertex] = total_vertex_quadric;
+    }
+
     // -> Build a priority queue of edges according to their quadric error cost,
     //    i.e., by building an Edge_Record for each edge and sticking it in the
     //    queue. You may want to use the above PQueue<Edge_Record> for this.
-    // -> Until we reach the target edge budget, collapse the best edge. Remember
-    //    to remove from the queue any edge that touches the collapsing edge
-    //    BEFORE it gets collapsed, and add back into the queue any edge touching
-    //    the collapsed vertex AFTER it's been collapsed. Also remember to assign
-    //    a quadric to the collapsed vertex, and to pop the collapsed edge off the
-    //    top of the queue.
+    for(EdgeRef edge = edges_begin(); edge != edges_end(); edge++)
+    {
+        Edge_Record edge_record(vertex_quadrics, edge);
+        edge_records[edge] = edge_record;
+        edge_queue.insert(edge_record);
+    }
 
-    // Note: if you erase elements in a local operation, they will not be actually deleted
-    // until do_erase or validate are called. This is to facilitate checking
-    // for dangling references to elements that will be erased.
-    // The rest of the codebase will automatically call validate() after each op,
-    // but here simply calling collapse_edge() will not erase the elements.
+    size_t num_triangles = faces.size();
+    const size_t target_num_triangles = (num_triangles / 4) + 1;
+
+    // Don't simplify if there are fewer than 4 triangles. 
+    if(target_num_triangles <= 2)
+    {
+        return false;
+    }
+
+    // -> Until we reach the target edge budget,
+    while(target_num_triangles < num_triangles)
+    {
+
+        // Get best edge.
+        Edge_Record best_edge = edge_queue.top();
+
+        // Remove from the queue any edge that touches the collapsing edge
+        // BEFORE it gets collapsed,
+        std::set<EdgeRef> incident_edges = GetIncidentEdges(best_edge.edge);
+        for(EdgeRef edge: incident_edges)
+        {
+            const Edge_Record& record = edge_records[edge];
+            edge_queue.remove(record);
+        }
+
+        // collapse the best edge.
+        std::optional<VertexRef> opt_vert =collapse_edge(best_edge.edge);
+        if(!opt_vert.has_value())
+        {
+            printf("No value!\n");
+
+        }
+
+        if(opt_vert.has_value())
+        {
+
+            printf("Has value!\n");
+            // Assign a quadric to the collapsed vertex, and assign it to the
+            // optimal position for that collapsed edge.
+            VertexRef collapsed_vertex = opt_vert.value();
+            collapsed_vertex->pos = best_edge.optimal;
+
+            HalfedgeRef face_iter = collapsed_vertex->halfedge();
+            const HalfedgeRef init_halfedge = collapsed_vertex->halfedge();
+
+            Mat4 total_vertex_quadric = {};
+            do
+            {
+                FaceRef incident_face = face_iter->face();
+                total_vertex_quadric += face_quadrics.at(incident_face);
+                face_iter = face_iter->twin()->next();
+            } while(face_iter != init_halfedge);
+            vertex_quadrics[collapsed_vertex] = total_vertex_quadric;
+
+            {
+                // Push all the edges incident to the removed vertex.
+                HalfedgeRef iter = collapsed_vertex->halfedge();
+                const HalfedgeRef init_hedge = collapsed_vertex->halfedge();
+                do{
+                    EdgeRef edge = iter->edge();
+                    Edge_Record record(vertex_quadrics, edge);
+                    edge_records[edge] = record;
+                    edge_queue.insert(record);
+
+                    iter = iter->twin()->next();
+                } while(iter != init_hedge);
+            }
+        }
+
+        // Pop the collapsed edge off the top of the queue.
+        edge_queue.pop();
+        num_triangles = faces.size();
+        // break;
+        printf("Removing edge from queue\n");
+        // Pop the collapsed edge off the top of the queue.
+        edge_queue.pop();
+        num_triangles = faces.size();
+    }
+    // Note: if you erase elements in a local operation, they will not be
+    // actually deleted until do_erase or validate are called. This is to
+    // facilitate checking for dangling references to elements that will be
+    // erased.
+    //
+    // The rest of the codebase will automatically call validate() after each
+    // op, but here simply calling collapse_edge() will not erase the elements.
     // You should use collapse_edge_erase() instead for the desired behavior.
-
-    return false;
+    return true;
 }
 
 void Halfedge_Mesh::Wire(HalfedgeRef he, HalfedgeRef next, HalfedgeRef twin,
