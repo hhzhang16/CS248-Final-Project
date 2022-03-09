@@ -8,34 +8,113 @@ BBox Triangle::bbox() const {
 
     // TODO (PathTracer): Task 2
     // compute the bounding box of the triangle
+    Vec3 min(+FLT_MAX);
+    Vec3 max(-FLT_MAX);
+
+    std::array<unsigned int, 3> vertices = {v0, v1, v2};
+    for(const unsigned int& vertex_id : vertices)
+    {
+        const Vec3& pos = vertex_list[vertex_id].position;
+        min.x = std::min(pos.x, min.x);
+        min.y = std::min(pos.y, min.y);
+        min.z = std::min(pos.z, min.z);
+
+        max.x = std::max(pos.x, max.x);
+        max.y = std::max(pos.y, max.y);
+        max.z = std::max(pos.z, max.z);
+    }
 
     // Beware of flat/zero-volume boxes! You may need to
     // account for that here, or later on in BBox::intersect
 
-    BBox box;
+    BBox box(min, max);
     return box;
 }
 
+/// @brief Part 2 implementation: Triangle hit.
+/// @todo (PathTracer): Task 2
+// Intersect this ray with a triangle defined by the three above points.
 Trace Triangle::hit(const Ray& ray) const {
-
     // Vertices of triangle - has postion and surface normal
     Tri_Mesh_Vert v_0 = vertex_list[v0];
     Tri_Mesh_Vert v_1 = vertex_list[v1];
     Tri_Mesh_Vert v_2 = vertex_list[v2];
-    (void)v_0;
-    (void)v_1;
-    (void)v_2;
 
-    // TODO (PathTracer): Task 2
-    // Intersect this ray with a triangle defined by the three above points.
+    // Source: https://stanford-cs248.github.io/Cardinal3D/pathtracer_extra/ray_triangle_intersection
+    Vec3 e1 = v_1.position - v_0.position;
+    Vec3 e2 = v_2.position - v_0.position;
+    Vec3 s = ray.point - v_0.position;
+
+    // Calculate 1 / (e1 x d) \cdot e2
+    float denom = dot(cross(e1, ray.dir), e2);
+
+    // If dot(e1 x dir, e2) is 0, this means several things:
+    // 1. e1 and the ray's dir produced a vector orthogonal to e2
+    // 2. This means that e1 and the ray were on the same plane
+    // 3. This means that either there were no collisions, or infinitely many.
+    // 4. So for now, let's say "hit = false"
+    if(fabsf(denom) < 0.00001f)
+    {
+        return Trace{};
+    }
+
+    Vec3 solve_vec = Vec3(
+        -1 * (dot(cross(s, e2), ray.dir)),
+        (dot(cross(e1, ray.dir), s)),
+        -1 * (dot(cross(s, e2), e1)));
+
+
+    /// u, v are barycentric coords for the triangle,
+    /// t is the "time" position where the ray intersected with the triangle.
+    Vec3 uvt = (1.0f / denom) * solve_vec;
+    float u = uvt.x;
+    float v = uvt.y;
+
+    // (Assume that u + v + w = 1)
+    /// @todo Is this a valid assumption? 
+    float w = 1 - u - v;
+
+    /// @todo (Part 2)
+    // The ray only intersected the triangle if the barycentric coordinates were
+    // between 0 and 1. (I think... Would be good to verify this).
+    if(u < 0 || u > 1 || v < 0 || v > 1)
+    {
+        return Trace{};
+    }
+
+    // Hit = False if the 'hit' was outside the bounds of the ray.
+    float t = uvt.z;
+    float min_bound = ray.dist_bounds.x;
+    float max_bound = ray.dist_bounds.y;
+    if(t < min_bound || t > max_bound)
+    {
+        return Trace{};
+    }
+
+    // Vec3 hit_position = ray.point + t * ray.dir;
+
+    // Interpolate the normals of each of the three vertices according to U, V,
+    // and W.
+    //
+    // U: Vertex v1 (v1 - v0)
+    // V: Vertex v2 (v2 - v0)
+    // W: Vertex v0 (the remaining one, v0)
+    Vec3 interpolated_normal =
+        v_0.normal * w +
+        v_1.normal * u +
+        v_2.normal * v;
+    (void) interpolated_normal;
 
     Trace ret;
     ret.origin = ray.point;
-    ret.hit = false;       // was there an intersection?
-    ret.distance = 0.0f;   // at what distance did the intersection occur?
-    ret.position = Vec3{}; // where was the intersection?
-    ret.normal = Vec3{};   // what was the surface normal at the intersection?
-                           // (this should be interpolated between the three vertex normals)
+    ret.hit = true;              // was there an intersection?
+    ret.distance = t;            // at what distance did the intersection occur?
+    ret.position = ray.at(t);    // where was the intersection?
+
+    // what was the surface normal at the intersection?
+    // (this should be interpolated between the three vertex normals)
+    ret.normal = Vec3(0, 0, 1);
+
     return ret;
 }
 

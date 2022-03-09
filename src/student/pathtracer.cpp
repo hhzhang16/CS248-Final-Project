@@ -31,13 +31,14 @@ Spectrum Pathtracer::trace_pixel(size_t x, size_t y) {
     // Tip: you may want to use log_ray for debugging
     Ray out = camera.generate_ray(screen_sample);
 
-    if(RNG::coin_flip(0.0005f))
-    {
-        printf("(X, Y) = (%zu, %zu) | Ray = (%.2f, %.2f, %.2f)\n",
-               x, y,
-               out.dir.x, out.dir.y, out.dir.z);
-        log_ray(out, 10.0f);
-    }
+    /// Debug
+    // if(RNG::coin_flip(0.0005f))
+    // {
+    //     printf("(X, Y) = (%zu, %zu) | Ray = (%.2f, %.2f, %.2f)\n",
+    //            x, y,
+    //            out.dir.x, out.dir.y, out.dir.z);
+    //     log_ray(out, 10.0f);
+    // }
 
     return trace_ray(out);
 }
