@@ -5,8 +5,9 @@
 
 namespace PT {
 
+/// @brief Information regarding a ray's intersection with an object.
 struct Trace {
-
+    /// @brief Trace is default-initialized to have 'hit = false'
     bool hit = false;
     float distance = 0.0f;
     Vec3 position, normal, origin;

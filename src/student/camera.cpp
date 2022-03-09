@@ -31,14 +31,6 @@ Ray Camera::generate_ray(Vec2 screen_coord) const {
     // Create the point in the view plane.
     Vec3 viewspace_pos = Vec3(view_x, view_y, float(-1.0f));
 
-    if(RNG::coin_flip(0.0005f))
-    {
-        printf("Screen_HW: (%.2f, %.2f) \t|\t View (X, Y): (%.2f, %.2f) \n",
-               screen_wh.x, screen_wh.y,
-               view_x, view_y);
-        printf("\t FOV (Deg, Rad): (%.2f, %.2f)\n", vert_fov, fov_radians);
-    }
-
     // Shoot a ray from viewspace origin, (0, 0, 0), to the viewspace position
     // for the screen coordinate.
     const Vec3 ray_direction_vs = viewspace_pos - Vec3(0, 0, 0);
