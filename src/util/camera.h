@@ -62,8 +62,14 @@ private:
 
     /// Camera parameters
     Vec3 position, looking_at;
-    /// FOV is in degrees
-    float vert_fov, aspect_ratio;
+
+    /// @brief Field of view for the camera. FOV is in degrees.
+    float vert_fov;
+
+    /// @brief Ratio of Width to Height. An AR of (16/9) means for every 16
+    /// units of width, there are 9 units of height.
+    float aspect_ratio;
+
     /// Current camera rotation
     Quat rot;
 

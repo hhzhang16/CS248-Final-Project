@@ -909,7 +909,6 @@ Animate& Manager::get_animate() {
 }
 
 void Manager::UIsavefirst(Scene& scene, Undo& undo) {
-
     if(!save_first_shown) return;
 
     Vec2 center = window_dim / 2.0f;
