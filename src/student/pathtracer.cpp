@@ -16,12 +16,29 @@ Spectrum Pathtracer::trace_pixel(size_t x, size_t y) {
     // Generate a sample within the pixel with coordinates xy and return the
     // incoming light using trace_ray.
 
+    // Step 1: Compute coordinates of the point normalized [0,1]x[0x1]
+    // coordinates.
+    const Vec2 sample_area = Vec2((float)(1.0f),(float)(1.0f));
+    Samplers::Rect::Uniform rect_sampler(sample_area);
+
+    float pdf;
+    const Vec2 sampled_point = rect_sampler.sample(pdf);
+    const Vec2 xy_sample = xy + sampled_point;
+
+    const Vec2 screen_sample = xy_sample / wh;
+
     // Tip: Samplers::Rect::Uniform
     // Tip: you may want to use log_ray for debugging
+    Ray out = camera.generate_ray(screen_sample);
 
-    // This currently generates a ray at the bottom left of the pixel every time.
+    if(RNG::coin_flip(0.0005f))
+    {
+        printf("(X, Y) = (%zu, %zu) | Ray = (%.2f, %.2f, %.2f)\n",
+               x, y,
+               out.dir.x, out.dir.y, out.dir.z);
+        log_ray(out, 10.0f);
+    }
 
-    Ray out = camera.generate_ray(xy / wh);
     return trace_ray(out);
 }
 

@@ -1,4 +1,3 @@
-
 #include "../rays/samplers.h"
 #include "../util/rand.h"
 #include "debug.h"
@@ -6,13 +5,17 @@
 namespace Samplers {
 
 Vec2 Rect::Uniform::sample(float& pdf) const {
-
     // TODO (PathTracer): Task 1
-    // Generate a uniformly random point on a rectangle of size size.x * size.y
-    // Tip: RNG::unit()
 
-    pdf = 1.0f; // the PDF should integrate to 1 over the whole rectangle
-    return Vec2();
+    // The PDF should integrate to 1 over the whole rectangle. Because we're
+    // uniformly sampling over a rectangle, each point
+    float area = size.x * size.y;
+    pdf = 1.0f / area;
+
+    // Generate a uniformly random point on a rectangle of size size.x * size.y
+    float rand_x = RNG::unit() * size.x;
+    float rand_y = RNG::unit() * size.y;
+    return Vec2(rand_x, rand_y);
 }
 
 Vec3 Hemisphere::Cosine::sample(float& pdf) const {

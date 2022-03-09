@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.17)
 
 # define project
-
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 project(Cardinal3D VERSION 1.1
                  DESCRIPTION "Stanford CS248 - Interactive Computer Graphics"
                  LANGUAGES CXX)

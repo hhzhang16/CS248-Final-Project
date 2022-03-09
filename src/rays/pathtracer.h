@@ -57,6 +57,9 @@ private:
     std::atomic<size_t> completed_epochs;
 
     /// Relevant to student
+
+    /// @brief Given the width and height, and the position of a point in screen
+    /// space, compute coordinates of the point
     Spectrum trace_pixel(size_t x, size_t y);
     Spectrum trace_ray(const Ray& ray);
     void log_ray(const Ray& ray, float t, Spectrum color = Spectrum{1.0f});
@@ -68,7 +71,15 @@ private:
     std::unordered_map<Scene_ID, size_t> mat_cache;
 
     Camera camera;
-    size_t out_w, out_h, n_samples, n_area_samples, max_depth;
+
+    /// @brief Output width and height.
+    size_t out_w, out_h;
+
+    /// @brief Number of samples and number of area samples to take.
+    size_t n_samples, n_area_samples;
+
+    /// @brief Unsure what this does. Clipping plane... Maybe?
+    size_t max_depth;
 };
 
 } // namespace PT
