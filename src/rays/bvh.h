@@ -37,7 +37,10 @@ private:
         bool is_leaf() const;
         friend class BVH<Primitive>;
     };
-    size_t new_node(BBox box = {}, size_t start = 0, size_t size = 0, size_t l = 0, size_t r = 0);
+    size_t new_node(BBox box = {}, size_t start = 0, size_t size = 0,
+                    size_t l = 0, size_t r = 0);
+
+    void find_closest_hit(Ray* ray, Node* node, Trace* closest);
 
     std::vector<Node> nodes;
     std::vector<Primitive> primitives;

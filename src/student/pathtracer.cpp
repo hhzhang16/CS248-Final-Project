@@ -76,10 +76,13 @@ Spectrum Pathtracer::trace_ray(const Ray& ray) {
     // to create a new path segment.
 
     // TODO (PathTracer): Task 5
-    // The starter code sets radiance_out to (0.5,0.5,0.5) so that you can test your geometry
-    // queries before you implement path tracing. You should change this to (0,0,0) and accumulate
-    // the direct and indirect lighting computed below.
-    Spectrum radiance_out = Spectrum(0.5f);
+    //
+    // The starter code sets radiance_out to (0.5,0.5,0.5) so that you can test
+    // your geometry queries before you implement path tracing. You should
+    // change this to (0,0,0) and accumulate the direct and indirect lighting
+    // computed below.
+    // Spectrum radiance_out = Spectrum(0.5f);
+    Spectrum radiance_out = Spectrum(0.0f);
     {
         auto sample_light = [&](const auto& light) {
             // If the light is discrete (e.g. a point light), then we only need
@@ -101,18 +104,29 @@ Spectrum Pathtracer::trace_ray(const Ray& ray) {
                 if(attenuation.luma() == 0.0f) continue;
 
                 // TODO (PathTracer): Task 4
-                // Construct a shadow ray and compute whether the intersected surface is
-                // in shadow. Only accumulate light if not in shadow.
+                //
+                // Construct a shadow ray and compute whether the intersected
+                // surface is in shadow. Only accumulate light if not in shadow.
 
-                // Tip: since you're creating the shadow ray at the intersection point, it may
-                // intersect the surface at time=0. Similarly, if the ray is allowed to have
-                // arbitrary length, it will hit the light it was cast at. Therefore, you should
-                // modify the time_bounds of your shadow ray to account for this. Using EPS_F is
-                // recommended.
+                // Tip: since you're creating the shadow ray at the intersection
+                // point, it may intersect the surface at time=0. Similarly, if
+                // the ray is allowed to have arbitrary length, it will hit the
+                // light it was cast at. Therefore, you should modify the
+                // time_bounds of your shadow ray to account for this. Using
+                // EPS_F is recommended.
+                Vec3 shadow_ray_direction = sample.direction;
+                Vec3 hit_point_offset = hit.position + (EPS_F * shadow_ray_direction);
+                Ray shadow_ray(hit_point_offset, shadow_ray_direction);
+                // Update bounds for this ray to be [0, distance-to-light]
+                shadow_ray.dist_bounds = Vec2(0.0f, sample.distance);
 
-                // Note: that along with the typical cos_theta, pdf factors, we divide by samples.
-                // This is because we're  doing another monte-carlo estimate of the lighting from
-                // area lights.
+                Trace shadow_hit = scene.hit(shadow_ray);
+                if(shadow_hit.hit)
+                    continue;
+
+                // Note: that along with the typical cos_theta, pdf factors, we
+                // divide by samples. This is because we're doing another
+                // monte-carlo estimate of the lighting from area lights.
                 radiance_out +=
                     (cos_theta / (samples * sample.pdf)) * sample.radiance * attenuation;
             }
