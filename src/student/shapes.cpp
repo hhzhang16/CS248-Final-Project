@@ -86,7 +86,6 @@ Trace Sphere::hit(const Ray& ray) const {
         return Trace{};
     }
 
-    printf("Sphere Hit!\n");
     Vec3 intersection = ray.point + t_soln * ray.dir;
 
     // If the intersection was at point p, with the sphere centered at the
