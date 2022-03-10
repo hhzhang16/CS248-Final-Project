@@ -77,7 +77,7 @@ Trace Triangle::hit(const Ray& ray) const {
     /// @todo (Part 2)
     // The ray only intersected the triangle if the barycentric coordinates were
     // between 0 and 1. (I think... Would be good to verify this).
-    if(u < 0 || u > 1 || v < 0 || v > 1)
+    if(u < 0 || u > 1 || v < 0 || v > 1 || w < 0 || w > 1)
     {
         return Trace{};
     }
@@ -103,7 +103,7 @@ Trace Triangle::hit(const Ray& ray) const {
         v_0.normal * w +
         v_1.normal * u +
         v_2.normal * v;
-    (void) interpolated_normal;
+    interpolated_normal.normalize();
 
     Trace ret;
     ret.origin = ray.point;
@@ -113,8 +113,7 @@ Trace Triangle::hit(const Ray& ray) const {
 
     // what was the surface normal at the intersection?
     // (this should be interpolated between the three vertex normals)
-    ret.normal = Vec3(0, 0, 1);
-
+    ret.normal = interpolated_normal;
     return ret;
 }
 
