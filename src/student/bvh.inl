@@ -9,23 +9,25 @@ template<typename Primitive>
 void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size) {
 
     // NOTE (PathTracer):
-    // This BVH is parameterized on the type of the primitive it contains. This allows
-    // us to build a BVH over any type that defines a certain interface. Specifically,
-    // we use this to both build a BVH over triangles within each Tri_Mesh, and over
-    // a variety of Objects (which might be Tri_Meshes, Spheres, etc.) in Pathtracer.
+    //
+    // This BVH is parameterized on the type of the primitive it contains. This
+    // allows us to build a BVH over any type that defines a certain interface.
+    // Specifically, we use this to both build a BVH over triangles within each
+    // Tri_Mesh, and over a variety of Objects (which might be Tri_Meshes,
+    // Spheres, etc.) in Pathtracer.
     //
     // The Primitive interface must implement these two functions:
     //      BBox bbox() const;
     //      Trace hit(const Ray& ray) const;
     // Hence, you may call bbox() and hit() on any value of type Primitive.
     //
-    // Finally, also note that while a BVH is a tree structure, our BVH nodes don't
-    // contain pointers to children, but rather indicies. This is because instead
-    // of allocating each node individually, the BVH class contains a vector that
-    // holds all of the nodes. Hence, to get the child of a node, you have to
-    // look up the child index in this vector (e.g. nodes[node.l]). Similarly,
-    // to create a new node, don't allocate one yourself - use BVH::new_node, which
-    // returns the index of a newly added node.
+    // Finally, also note that while a BVH is a tree structure, our BVH nodes
+    // don't contain pointers to children, but rather indicies. This is because
+    // instead of allocating each node individually, the BVH class contains a
+    // vector that holds all of the nodes. Hence, to get the child of a node,
+    // you have to look up the child index in this vector (e.g. nodes[node.l]).
+    // Similarly, to create a new node, don't allocate one yourself - use
+    // BVH::new_node, which returns the index of a newly added node.
 
     // Keep these
     nodes.clear();
@@ -45,7 +47,15 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
     root_idx = 0;
 }
 
-template<typename Primitive> Trace BVH<Primitive>::hit(const Ray& ray) const {
+template<typename Primitive>
+void BVH<Primitive>::find_closest_hit(Ray* ray, Node* node, Trace* closest)
+{
+    
+}
+
+
+template<typename Primitive>
+Trace BVH<Primitive>::hit(const Ray& ray) const {
 
     // TODO (PathTracer): Task 3
     // Implement ray - BVH intersection test. A ray intersects
