@@ -153,6 +153,7 @@ Spectrum Pathtracer::trace_ray(const Ray& ray) {
     // transmittance ray depending on surface type) using bsdf.sample()
 
     BSDF_Sample bsdf_sample = bsdf.sample(hit.normal);
+    radiance_out += bsdf_sample.emissive;
     // cosine of angle between hemisphere vector and original vector.
     float cos_rays = dot(bsdf_sample.direction, hit.normal);
 
@@ -163,8 +164,23 @@ Spectrum Pathtracer::trace_ray(const Ray& ray) {
     // probability to approach 1 may cause extra speckling.
     Spectrum recurse_throughput = ray.throughput;
     recurse_throughput *= (1 / bsdf_sample.pdf);
+
+    float norm_pdf = recurse_throughput.to_vec().norm();
+
     recurse_throughput *= bsdf_sample.attenuation;
+    float norm_attenuation = recurse_throughput.to_vec().norm();
+
     recurse_throughput *= cos_rays; // replaced by just a dot b?
+    float norm_cos = recurse_throughput.to_vec().norm();
+    if(RNG::coin_flip(.0005))
+    {
+        printf("(PDF, Attenuation, Cos): (%.2f, %.2f, %.2f)\n",
+               norm_pdf, norm_attenuation, norm_cos);
+
+        const Spectrum& emission =  bsdf_sample.emissive;
+        printf("Sample Emissive: (%.2f, %.2f, %.2f)\n",
+               emission.r, emission.g, emission.b);
+    }
 
     // Terminate as a function of new throughput.
     /// @todo Is this probability calculation correct? The higher the luma, the

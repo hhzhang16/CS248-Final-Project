@@ -51,12 +51,10 @@ BSDF_Sample BSDF_Lambertian::sample(Vec3 out_dir) const {
 
     // What is the ratio of reflected/incoming light?
     ret.attenuation = albedo;
-    if(RNG::coin_flip(.0005))
-        printf("Albedo: %.2f, %.2f, %.2f\n", albedo.r, albedo.g, albedo.b);
 
     // What direction should we sample incoming light from?
     ret.direction = hemisphere_dir.unit();
-
+    ret.emissive = albedo;
     // Was was the PDF of the sampled direction?
     ret.pdf = pdf;
     return ret;
