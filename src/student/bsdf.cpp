@@ -20,24 +20,43 @@ Vec3 refract(Vec3 out_dir, float index_of_refraction, bool& was_internal) {
     // refraction does not occur due to total internal reflection,
     // and true otherwise.
 
-    // When dot(out_dir,normal=(0,1,0)) is positive, then out_dir corresponds to a
-    // ray exiting the surface into vaccum (ior = 1). However, note that
-    // you should actually treat this case as _entering_ the surface, because
-    // you want to compute the 'input' direction that would cause this output,
-    // and to do so you can simply find the direction that out_dir would refract
+    // When dot(out_dir,normal=(0,1,0)) is positive, then out_dir corresponds to
+    // a ray exiting the surface into vaccum (ior = 1). However, note that you
+    // should actually treat this case as _entering_ the surface, because you
+    // want to compute the 'input' direction that would cause this output, and
+    // to do so you can simply find the direction that out_dir would refract
     // _to_, as refraction is symmetric.
     return Vec3();
 }
 
+
+/// @brief Given a unit normal with directions (x, y, z), samples a hemisphere
+/// for a direction. Additionally, it ensures the sampled vector is oriented in
+/// the same direction as the normal (dot product is 0).
 BSDF_Sample BSDF_Lambertian::sample(Vec3 out_dir) const {
 
     // TODO (PathTracer): Task 5
     // Implement lambertian BSDF. Use of BSDF_Lambertian::sampler may be useful
 
+    // (2) Randomly select a new ray direction (it may be reflection or
+    // transmittance ray depending on surface type) using bsdf.sample()
+    float pdf;
+
+    Vec3 hemisphere_dir = sampler.sample(pdf);
+
+    if(dot(out_dir, hemisphere_dir) < 0)
+        hemisphere_dir *= -1;
+
     BSDF_Sample ret;
-    ret.attenuation = Spectrum(); // What is the ratio of reflected/incoming light?
-    ret.direction = Vec3();       // What direction should we sample incoming light from?
-    ret.pdf = 0.0f;               // Was was the PDF of the sampled direction?
+
+    // What is the ratio of reflected/incoming light?
+    ret.attenuation = albedo;
+
+    // What direction should we sample incoming light from?
+    ret.direction = hemisphere_dir.unit();
+    ret.emissive = albedo;
+    // Was was the PDF of the sampled direction?
+    ret.pdf = pdf;
     return ret;
 }
 

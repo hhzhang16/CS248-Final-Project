@@ -75,13 +75,12 @@ Spectrum Pathtracer::trace_ray(const Ray& ray) {
     // the current path to each light in the scene), then sampling the BSDF
     // to create a new path segment.
 
-    // TODO (PathTracer): Task 5
+    // TODO (PathTracer): Task 4
     //
     // The starter code sets radiance_out to (0.5,0.5,0.5) so that you can test
     // your geometry queries before you implement path tracing. You should
     // change this to (0,0,0) and accumulate the direct and indirect lighting
     // computed below.
-    // Spectrum radiance_out = Spectrum(0.5f);
     Spectrum radiance_out = Spectrum(0.0f);
     {
         auto sample_light = [&](const auto& light) {
@@ -98,8 +97,10 @@ Spectrum Pathtracer::trace_ray(const Ray& ray) {
                 if(cos_theta <= 0.0f) continue;
 
                 // If the BSDF has 0 throughput in this direction, ignore it.
-                // This is another oppritunity to do Russian roulette on low-throughput rays,
-                // which would allow us to skip the shadow ray cast, increasing efficiency.
+                //
+                // This is another oppritunity to do Russian roulette on
+                // low-throughput rays, which would allow us to skip the shadow
+                // ray cast, increasing efficiency.
                 Spectrum attenuation = bsdf.evaluate(out_dir, in_dir);
                 if(attenuation.luma() == 0.0f) continue;
 
@@ -142,24 +143,74 @@ Spectrum Pathtracer::trace_ray(const Ray& ray) {
 
     // TODO (PathTracer): Task 5
     // Compute an indirect lighting estimate using pathtracing with Monte Carlo.
-
+    
     // (1) Ray objects have a depth field; if it reaches max_depth, you should
     // terminate the path.
+    if(ray.depth >= max_depth)
+        return radiance_out;
 
-    // (2) Randomly select a new ray direction (it may be reflection or transmittance
-    // ray depending on surface type) using bsdf.sample()
+    // (2) Randomly select a new ray direction (it may be reflection or
+    // transmittance ray depending on surface type) using bsdf.sample()
 
-    // (3) Compute the throughput of the recursive ray. This should be the current ray's
-    // throughput scaled by the BSDF attenuation, cos(theta), and BSDF sample PDF.
-    // Potentially terminate the path using Russian roulette as a function of the new throughput.
-    // Note that allowing the termination probability to approach 1 may cause extra speckling.
+    BSDF_Sample bsdf_sample = bsdf.sample(hit.normal);
+    radiance_out += bsdf_sample.emissive;
+    // cosine of angle between hemisphere vector and original vector.
+    float cos_rays = dot(bsdf_sample.direction, hit.normal);
 
-    // (4) Create new scene-space ray and cast it to get incoming light. As with shadow rays, you
-    // should modify time_bounds so that the ray does not intersect at time = 0. Remember to
-    // set the new throughput and depth values.
+    // (3) Compute the throughput of the recursive ray. This should be the
+    // current ray's throughput scaled by the BSDF attenuation, cos(theta), and
+    // BSDF sample PDF. Potentially terminate the path using Russian roulette as
+    // a function of the new throughput. Note that allowing the termination
+    // probability to approach 1 may cause extra speckling.
+    Spectrum recurse_throughput = ray.throughput;
+    recurse_throughput *= (1 / bsdf_sample.pdf);
 
-    // (5) Add contribution due to incoming light with proper weighting. Remember to add in
-    // the BSDF sample emissive term.
+    float norm_pdf = recurse_throughput.to_vec().norm();
+
+    recurse_throughput *= bsdf_sample.attenuation;
+    float norm_attenuation = recurse_throughput.to_vec().norm();
+
+    recurse_throughput *= cos_rays; // replaced by just a dot b?
+    float norm_cos = recurse_throughput.to_vec().norm();
+    if(RNG::coin_flip(.0005))
+    {
+        printf("(PDF, Attenuation, Cos): (%.2f, %.2f, %.2f)\n",
+               norm_pdf, norm_attenuation, norm_cos);
+
+        const Spectrum& emission =  bsdf_sample.emissive;
+        printf("Sample Emissive: (%.2f, %.2f, %.2f)\n",
+               emission.r, emission.g, emission.b);
+    }
+
+    // Terminate as a function of new throughput.
+    /// @todo Is this probability calculation correct? The higher the luma, the
+    /// lower the chance we terminate.
+    float probability = (1 - recurse_throughput.luma());
+    if(!RNG::coin_flip(probability))
+        return radiance_out;
+
+    // (4) Create new scene-space ray and cast it to get incoming light. As with
+    // shadow rays, you should modify time_bounds so that the ray does not
+    // intersect at time = 0. Remember to set the new throughput and depth
+    // values.
+    Ray scene_space_ray;
+    scene_space_ray.dist_bounds = Vec2(EPS_F, ray.dist_bounds.y);
+    scene_space_ray.throughput = recurse_throughput;
+    scene_space_ray.depth = ray.depth + 1;
+
+    Spectrum recurse_result = trace_ray(scene_space_ray);
+
+    // (5) Add contribution due to incoming light with proper weighting.
+    // Remember to add in the BSDF sample emissive term.
+    radiance_out += (recurse_result) / recurse_throughput.luma();
+    radiance_out += bsdf_sample.emissive;
+
+    if(RNG::coin_flip(.0005))
+        printf("radiance out: %.2f, %.2f, %.2f\n",
+               radiance_out.r,
+               radiance_out.g,
+               radiance_out.b);
+
     return radiance_out;
 }
 
