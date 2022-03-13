@@ -1,6 +1,9 @@
 
 #pragma once
 
+#include <map>
+#include <vector>
+
 #include "../lib/mathlib.h"
 #include "../platform/gl.h"
 
@@ -44,7 +47,7 @@ private:
     struct Bucket {
         BBox bbox;
         int prim_count;
-    }
+    };
 
     // go through list of primitives and memoize their bounding boxes and buckets
     void preparse();
@@ -57,14 +60,15 @@ private:
                        float& lowest_partition_cost, float& best_partition_value);
 
     void find_closest_hit(Ray* ray, Node* node, Trace* closest);
+    // our added recursive helper for hit
+    Trace hitRec(const Ray& ray, size_t node_index) const;
 
     std::vector<Node> nodes;
     std::vector<Primitive> primitives;
     size_t root_idx = 0;
 
     // member variables to keep track of primitive buckets and bounding boxes
-    std::unordered_map<Primitive, BBox> primitive_bboxes;
-    std::unordered_map<Primitive, Vec3> primitive_centroids;
+    std::map<size_t, BBox> primitive_bboxes; // primitive index --> its bounding box
     // Vec3 bvh_min;
     // Vec3 bvh_max;
     int num_buckets = 16;
