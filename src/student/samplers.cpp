@@ -28,11 +28,23 @@ Vec3 Hemisphere::Cosine::sample(float& pdf) const {
 Vec3 Sphere::Uniform::sample(float& pdf) const {
 
     // TODO (PathTracer): Task 7
-    // Generate a uniformly random point on the unit sphere (or equivalently, direction)
-    // Tip: start with Hemisphere::Uniform
+    //
+    // Generate a uniformly random point on the unit sphere (or equivalently,
+    // direction) Tip: start with Hemisphere::Uniform
 
-    pdf = 1.0f; // what was the PDF at the chosen direction?
-    return Vec3();
+    // Essentially, generate a hemisphere point, and with a 50/50 chance, negate
+    // it.
+    Vec3 sampled_vec = hemi.sample(pdf);
+    if(RNG::coin_flip())
+    {
+        sampled_vec *= -1;
+    }
+    printf("{Sphere::Sample}\n\tVec: [%.2f, %.2f, %.2f] (Norm: %.2f)\n",
+           sampled_vec.x, sampled_vec.y, sampled_vec.z, sampled_vec.norm());
+    assert(sampled_vec.norm() >= 0.98f);
+
+    pdf = 1/(4 * PI_F); // what was the PDF at the chosen direction?
+    return sampled_vec;
 }
 
 Sphere::Image::Image(const HDR_Image& image) {
