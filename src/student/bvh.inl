@@ -3,6 +3,7 @@
 #include "debug.h"
 #include <stack>
 #include <vector>
+#include <iostream>
 
 namespace PT {
 
@@ -57,6 +58,10 @@ float BVH<Primitive>::calcSAH(float mainSurfaceArea, const std::vector<BVH<Primi
         bbox.enclose(bucket.bbox);
         num_prims += bucket.prim_count;
     }
+    if (num_prims == 0) {
+        // no objects in this partition -- skip this option
+        return INT_MAX / 2;
+    }
 
     float subSurfaceArea = bbox.surface_area();
     return subSurfaceArea / mainSurfaceArea * num_prims;
@@ -74,6 +79,7 @@ bool BVH<Primitive>::findLowestSAH(float mainSurfaceArea, float space_start, flo
         std::vector<BVH<Primitive>::Bucket> rightHalf(buckets.begin() + i, buckets.end());
         float partition_cost = calcSAH(mainSurfaceArea, leftHalf) +
                                calcSAH(mainSurfaceArea, rightHalf);
+        
         if (partition_cost < lowest_partition_cost) {
             lowest_partition_cost = partition_cost;
             best_partition_value = space_start + bucket_size * i;
@@ -103,8 +109,6 @@ void BVH<Primitive>::buildRec(size_t node_index, size_t max_leaf_size) {
     float mainSurfaceArea = nodes[node_index].bbox.surface_area();
     Vec3 diff = node.bbox.max - node.bbox.min;
     Vec3 bucket_size = diff / num_buckets;
-    float lowest_partition_cost = INT_MAX;
-    float pivot = -1;
 
     // x
     std::vector<Bucket> bucketsX(num_buckets);
@@ -112,20 +116,27 @@ void BVH<Primitive>::buildRec(size_t node_index, size_t max_leaf_size) {
     std::vector<Bucket> bucketsZ(num_buckets);
     for (size_t i = node.start; i < node.start + node.size; i++) {
         Vec3 centroid = primitives[i].bbox().center();
-        Vec3 bucket_indices = (centroid - node.bbox.min) / bucket_size;
+        Vec3 bucket_indices = (centroid - node.bbox.min) / bucket_size + 0.00002; // 0.00001 is epsilon
+
+        // make bucket indices ints
+        int xIndex = std::floor(bucket_indices.x);
+        int yIndex = std::floor(bucket_indices.y);
+        int zIndex = std::floor(bucket_indices.z);
         
         // x
-        bucketsX[bucket_indices.x].bbox.enclose(primitives[i].bbox());
-        bucketsX[bucket_indices.x].prim_count++;
+        bucketsX[xIndex].bbox.enclose(primitives[i].bbox());
+        bucketsX[xIndex].prim_count++;
         // y
-        bucketsY[bucket_indices.y].bbox.enclose(primitives[i].bbox());
-        bucketsY[bucket_indices.y].prim_count++;
+        bucketsY[yIndex].bbox.enclose(primitives[i].bbox());
+        bucketsY[yIndex].prim_count++;
         // z
-        bucketsZ[bucket_indices.z].bbox.enclose(primitives[i].bbox());
-        bucketsZ[bucket_indices.z].prim_count++;
+        bucketsZ[zIndex].bbox.enclose(primitives[i].bbox());
+        bucketsZ[zIndex].prim_count++;
     }
 
     // do the partitions
+    float lowest_partition_cost = INT_MAX;
+    float pivot = -1;
     int changed_param = 0; // 0 for x, 1 for y, 2 for z
     findLowestSAH(mainSurfaceArea, node.bbox.min.x, bucket_size.x, bucketsX, lowest_partition_cost, pivot);
     if (findLowestSAH(mainSurfaceArea, node.bbox.min.y, bucket_size.y, bucketsY, lowest_partition_cost, pivot)) {
@@ -170,11 +181,15 @@ void BVH<Primitive>::buildRec(size_t node_index, size_t max_leaf_size) {
     buildRec(right_child, max_leaf_size);
 }
 
+
+template<typename Primitive>
+void BVH<Primitive>::find_closest_hit(Ray* ray, Node* node, Trace* closest) {}
+
 /* Note: to even enter this function, we presuppose that ray intersects the
  * current node
  */
 template<typename Primitive>
-void BVH<Primitive>::find_closest_hit(const Ray& ray, Node* node, Trace* closest) const
+void BVH<Primitive>::closest_hit(const Ray& ray, Node* node, Trace* closest) const
 {
     // base case
     if (node->is_leaf()) {
@@ -200,34 +215,25 @@ void BVH<Primitive>::find_closest_hit(const Ray& ray, Node* node, Trace* closest
     bool rHit = rightChild.bbox.hit(ray, timesR);
 
     if (lHit && !rHit) { // only hit left child
-        find_closest_hit(ray, &leftChild, closest);
+        closest_hit(ray, &leftChild, closest);
     } else if (rHit && !lHit) { // only hit right child
-        find_closest_hit(ray, &rightChild, closest);
+        closest_hit(ray, &rightChild, closest);
     } else {
         // lHit && rHit
         if (timesL.x < timesR.x) {
             // hit left child first, check it first
-            find_closest_hit(ray, &leftChild, closest);
+            closest_hit(ray, &leftChild, closest);
             if (timesR.x < closest->distance) {
-                find_closest_hit(ray, &rightChild, closest);
+                closest_hit(ray, &rightChild, closest);
             }
         } else {
-            find_closest_hit(ray, &rightChild, closest);
+            closest_hit(ray, &rightChild, closest);
             if (timesL.x < closest->distance) {
-                find_closest_hit(ray, &leftChild, closest);
+                closest_hit(ray, &leftChild, closest);
             }
         }
     }
 }
-
-/* Recurses to find the trace whether ray intersects our BVH
- */
-// template<typename Primitive>
-// Trace BVH<Primitive>::hitRec(const Ray& ray, size_t node_index) const {
-//     // base case
-//     Trace ret; 
-//     return ret;
-// }
 
 template<typename Primitive>
 Trace BVH<Primitive>::hit(const Ray& ray) const {
@@ -243,12 +249,8 @@ Trace BVH<Primitive>::hit(const Ray& ray) const {
     Node root = nodes[0];
     Trace ret;
     Vec2 times(INT_MIN, INT_MAX);
-    // for(const Primitive& prim : primitives) {
-    //     Trace hit = prim.hit(ray);
-    //     ret = Trace::min(ret, hit);
-    // }
     if (root.bbox.hit(ray, times)) {
-        find_closest_hit(ray, &root, &ret);
+        closest_hit(ray, &root, &ret);
     }
     return ret;
 }

@@ -56,9 +56,8 @@ private:
                        const std::vector<Bucket>& buckets, 
                        float& lowest_partition_cost, float& best_partition_value);
 
-    void find_closest_hit(const Ray& ray, Node* node, Trace* closest) const;
-    // our added recursive helper for hit
-    // Trace hitRec(const Ray& ray, size_t node_index) const;
+    void closest_hit(const Ray& ray, Node* node, Trace* closest) const;
+    void find_closest_hit(Ray* ray, Node* node, Trace* closest);
 
     std::vector<Node> nodes;
     std::vector<Primitive> primitives;
