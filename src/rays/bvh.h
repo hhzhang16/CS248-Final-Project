@@ -49,9 +49,6 @@ private:
         int prim_count;
     };
 
-    // go through list of primitives and memoize their bounding boxes and buckets
-    void preparse();
-
     // our added recursive helper for build
     void buildRec(size_t node_index, size_t max_leaf_size);
     float calcSAH(float mainSurfaceArea, const std::vector<Bucket>& partition);
@@ -59,18 +56,13 @@ private:
                        const std::vector<Bucket>& buckets, 
                        float& lowest_partition_cost, float& best_partition_value);
 
-    void find_closest_hit(Ray* ray, Node* node, Trace* closest);
+    void find_closest_hit(const Ray& ray, Node* node, Trace* closest) const;
     // our added recursive helper for hit
-    Trace hitRec(const Ray& ray, size_t node_index) const;
+    // Trace hitRec(const Ray& ray, size_t node_index) const;
 
     std::vector<Node> nodes;
     std::vector<Primitive> primitives;
     size_t root_idx = 0;
-
-    // member variables to keep track of primitive buckets and bounding boxes
-    std::map<size_t, BBox> primitive_bboxes; // primitive index --> its bounding box
-    // Vec3 bvh_min;
-    // Vec3 bvh_max;
     int num_buckets = 16;
 };
 
