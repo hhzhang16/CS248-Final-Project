@@ -52,9 +52,9 @@ private:
     // our added recursive helper for build
     void buildRec(size_t node_index, size_t max_leaf_size);
     float calcSAH(float mainSurfaceArea, const std::vector<Bucket>& partition);
-    void findLowestSAH(float mainSurfaceArea, //const Vec3& space_start, const Vec3& bucket_size,
+    bool findLowestSAH(float mainSurfaceArea, float space_start, float bucket_size,
                        const std::vector<Bucket>& buckets, 
-                       float& lowest_partition_cost, float& partition_index);
+                       float& lowest_partition_cost, float& best_partition_value);
 
     void find_closest_hit(Ray* ray, Node* node, Trace* closest);
 

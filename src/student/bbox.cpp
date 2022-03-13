@@ -22,12 +22,22 @@ bool BBox::hit(const Ray& ray, Vec2& times) const {
     if (minIntersect.y > maxIntersect.y) swap(minIntersect.y, maxIntersect.y);
     if (minIntersect.z > maxIntersect.z) swap(minIntersect.z, maxIntersect.z);
 
+    // Check whether the ray intersects the box at all
+    if ((minIntersect.x > maxIntersect.y) || (minIntersect.y > maxIntersect.x)) {
+        return false; 
+    }
+    float tMin = std::min(minIntersect.x, minIntersect.y);
+    float tMax = std::max(maxIntersect.x, maxIntersect.y);
+    if ((tMin > maxIntersect.z) || (minIntersect.z > tMax)) {
+        return false; 
+    }
+
     // Check whether the ray intersects within the bounding box range
-    int tMin = std::min(std::min(minIntersect.x, minIntersect.y), minIntersect.z);
+    tMin = std::min(tMin, minIntersect.z);
     if (tMin < times.x) {
         return false;
     }
-    int tMax = std::max(std::max(maxIntersect.x, maxIntersect.y), maxIntersect.z);
+    tMax = std::max(tMax, maxIntersect.z);
     if (tMax > times.y) {
         return false;
     }
