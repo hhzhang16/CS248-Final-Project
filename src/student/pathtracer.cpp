@@ -115,12 +115,16 @@ Spectrum Pathtracer::trace_ray(const Ray& ray) {
                 Vec3 shadow_ray_direction = sample.direction;
                 Vec3 hit_point_offset = hit.position + (EPS_F * shadow_ray_direction);
                 Ray shadow_ray(hit_point_offset, shadow_ray_direction);
+
                 // Update bounds for this ray to be [0, distance-to-light]
                 shadow_ray.dist_bounds = Vec2(0.0f, sample.distance);
 
                 Trace shadow_hit = scene.hit(shadow_ray);
                 if(shadow_hit.hit)
+                {
                     continue;
+                }
+
 
                 // Note: that along with the typical cos_theta, pdf factors, we
                 // divide by samples. This is because we're doing another
@@ -148,10 +152,10 @@ Spectrum Pathtracer::trace_ray(const Ray& ray) {
 
     // (2) Randomly select a new ray direction (it may be reflection or
     // transmittance ray depending on surface type) using bsdf.sample()
-
+    
     BSDF_Sample bsdf_sample = bsdf.sample(hit.normal);
-    radiance_out += bsdf_sample.emissive;
-    // cosine of angle between hemisphere vector and original vector.
+
+    // cosine of angle between (generated) hemisphere vector and original vector
     float cos_rays = dot(bsdf_sample.direction, hit.normal);
 
     // (3) Compute the throughput of the recursive ray. This should be the
@@ -160,55 +164,42 @@ Spectrum Pathtracer::trace_ray(const Ray& ray) {
     // a function of the new throughput. Note that allowing the termination
     // probability to approach 1 may cause extra speckling.
     Spectrum recurse_throughput = ray.throughput;
-    recurse_throughput *= (1 / bsdf_sample.pdf);
-
-    float norm_pdf = recurse_throughput.to_vec().norm();
-
+    recurse_throughput *= cos_rays / bsdf_sample.pdf;
     recurse_throughput *= bsdf_sample.attenuation;
-    float norm_attenuation = recurse_throughput.to_vec().norm();
-
-    recurse_throughput *= cos_rays; // replaced by just a dot b?
-    float norm_cos = recurse_throughput.to_vec().norm();
-    if(RNG::coin_flip(.0005))
-    {
-        printf("(PDF, Attenuation, Cos): (%.2f, %.2f, %.2f)\n",
-               norm_pdf, norm_attenuation, norm_cos);
-
-        const Spectrum& emission =  bsdf_sample.emissive;
-        printf("Sample Emissive: (%.2f, %.2f, %.2f)\n",
-               emission.r, emission.g, emission.b);
-    }
 
     // Terminate as a function of new throughput.
     /// @todo Is this probability calculation correct? The higher the luma, the
     /// lower the chance we terminate.
+
     float probability = (1 - recurse_throughput.luma());
     if(!RNG::coin_flip(probability))
         return radiance_out;
+
+    assert(recurse_throughput.valid());
 
     // (4) Create new scene-space ray and cast it to get incoming light. As with
     // shadow rays, you should modify time_bounds so that the ray does not
     // intersect at time = 0. Remember to set the new throughput and depth
     // values.
+
     Ray scene_space_ray;
     scene_space_ray.dist_bounds = Vec2(EPS_F, ray.dist_bounds.y);
     scene_space_ray.throughput = recurse_throughput;
+    scene_space_ray.dir = bsdf_sample.direction;
     scene_space_ray.depth = ray.depth + 1;
+    scene_space_ray.point = hit.origin;
 
     Spectrum recurse_result = trace_ray(scene_space_ray);
 
     // (5) Add contribution due to incoming light with proper weighting.
     // Remember to add in the BSDF sample emissive term.
-    radiance_out += (recurse_result) / recurse_throughput.luma();
-    radiance_out += bsdf_sample.emissive;
+    // radiance_out += recurse_result / scene_space_ray.throughput;
+    // radiance_out += bsdf_sample.emissive;
 
-    if(RNG::coin_flip(.0005))
-        printf("radiance out: %.2f, %.2f, %.2f\n",
-               radiance_out.r,
-               radiance_out.g,
-               radiance_out.b);
+    const float pdf = bsdf_sample.pdf;
+    Spectrum new_ray = (recurse_result) / (pdf * probability);
 
-    return radiance_out;
+    return new_ray;
 }
 
 } // namespace PT

@@ -48,8 +48,6 @@ Vec3 refract(Vec3 out_dir, float index_of_refraction, bool& was_internal) {
     // _to_, as refraction is symmetric.
 
     // Otherwise, use snell's law.
-
-    
     Vec3 refraction_dir;
     return refraction_dir;
 }
@@ -79,7 +77,7 @@ BSDF_Sample BSDF_Lambertian::sample(Vec3 out_dir) const {
 
     // What direction should we sample incoming light from?
     ret.direction = hemisphere_dir.unit();
-    ret.emissive = albedo;
+
     // Was was the PDF of the sampled direction?
     ret.pdf = pdf;
     return ret;
@@ -93,11 +91,12 @@ BSDF_Sample BSDF_Mirror::sample(Vec3 out_dir) const {
 
     // TODO (PathTracer): Task 6
     // Implement mirror BSDF
+    out_dir = out_dir.normalize();
 
     BSDF_Sample ret;
 
     // What is the ratio of reflected/incoming light?
-    ret.attenuation = Spectrum(1.0);
+    ret.attenuation = reflectance;
 
     // What direction should we sample incoming light from?
     ret.direction = reflect(out_dir);
@@ -117,7 +116,6 @@ Spectrum BSDF_Mirror::evaluate(Vec3 out_dir, Vec3 in_dir) const {
 }
 
 BSDF_Sample BSDF_Glass::sample(Vec3 out_dir) const {
-
     // TODO (PathTracer): Task 6
     // Implement glass BSDF.
     const Vec3 normal(0, 1, 0);
