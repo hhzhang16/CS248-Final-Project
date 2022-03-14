@@ -215,7 +215,7 @@ void BVH<Primitive>::closest_hit(const Ray& ray, const Node& node, Trace* closes
     bool rHit = rightChild.bbox.hit(ray, timesR);
 
     if (lHit && !rHit) { // only hit left child
-        closest_hit(ray, leftChild, closest);
+\        closest_hit(ray, leftChild, closest);
     } else if (rHit && !lHit) { // only hit right child
         closest_hit(ray, rightChild, closest);
     } else {
