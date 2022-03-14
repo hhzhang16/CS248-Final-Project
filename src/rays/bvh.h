@@ -56,13 +56,15 @@ private:
                        const std::vector<Bucket>& buckets, 
                        float& lowest_partition_cost, float& best_partition_value);
 
-    void closest_hit(const Ray& ray, Node* node, Trace* closest) const;
+    void closest_hit(const Ray& ray, const Node& node, Trace* closest) const;
     void find_closest_hit(Ray* ray, Node* node, Trace* closest);
 
     std::vector<Node> nodes;
     std::vector<Primitive> primitives;
     size_t root_idx = 0;
     int num_buckets = 16;
+    float big_epsilon = 0.01;
+    float small_epsilon = 0.00002;
 };
 
 } // namespace PT

@@ -32,13 +32,10 @@ Spectrum Pathtracer::trace_pixel(size_t x, size_t y) {
     Ray out = camera.generate_ray(screen_sample);
 
     /// Debug
-    // if(RNG::coin_flip(0.0005f))
-    // {
-    //     printf("(X, Y) = (%zu, %zu) | Ray = (%.2f, %.2f, %.2f)\n",
-    //            x, y,
-    //            out.dir.x, out.dir.y, out.dir.z);
-    //     log_ray(out, 10.0f);
-    // }
+    if(RNG::coin_flip(0.00005f))
+    {
+        log_ray(out, 10.0f);
+    }
 
     return trace_ray(out);
 }
