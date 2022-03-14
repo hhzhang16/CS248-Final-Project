@@ -195,13 +195,7 @@ void BVH<Primitive>::closest_hit(const Ray& ray, const Node& node, Trace* closes
     if (node.is_leaf()) {
         for (size_t i = node.start; i < node.start + node.size; i++) {
             Trace prim_hit = primitives[i].hit(ray);
-            if (prim_hit.hit) { // ray hits this primitive
-                if (!closest->hit) { // this is the first primitive we've seen the ray hit
-                    *closest = prim_hit;
-                } else {
-                    *closest = Trace::min(*closest, prim_hit);
-                }
-            }
+            *closest = Trace::min(*closest, prim_hit);
         }
         return;
     }
@@ -215,7 +209,7 @@ void BVH<Primitive>::closest_hit(const Ray& ray, const Node& node, Trace* closes
     bool rHit = rightChild.bbox.hit(ray, timesR);
 
     if (lHit && !rHit) { // only hit left child
-\        closest_hit(ray, leftChild, closest);
+        closest_hit(ray, leftChild, closest);
     } else if (rHit && !lHit) { // only hit right child
         closest_hit(ray, rightChild, closest);
     } else {
@@ -223,12 +217,12 @@ void BVH<Primitive>::closest_hit(const Ray& ray, const Node& node, Trace* closes
         if (timesL.x < timesR.x) {
             // hit left child first, check it first
             closest_hit(ray, leftChild, closest);
-            if (timesR.x < closest->distance) {
+            if (!closest->hit || timesR.x < closest->distance) {
                 closest_hit(ray, rightChild, closest);
             }
         } else {
             closest_hit(ray, rightChild, closest);
-            if (timesL.x < closest->distance) {
+            if (!closest->hit || timesL.x < closest->distance) {
                 closest_hit(ray, leftChild, closest);
             }
         }

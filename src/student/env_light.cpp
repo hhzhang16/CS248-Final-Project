@@ -35,10 +35,10 @@ Light_Sample Env_Map::sample() const {
 /// @brief Perform linear interpolation between the values LHS and RHS according
 /// to the following formula:
 ///
-/// (t * LHS) + (1 - t) * RHS
+/// (t * LHS) + (1 - t) * RHS, where t is [0, 1]
 Spectrum lerp(const Spectrum& lhs, const Spectrum rhs, float t)
 {
-    return (t * lhs) + (1 - t) * rhs;
+    return (t * lhs) + (1.0f - t) * rhs;
 }
 
 Spectrum Env_Map::sample_direction(Vec3 dir) const {
@@ -49,41 +49,37 @@ Spectrum Env_Map::sample_direction(Vec3 dir) const {
     // interpolate the value between the 4 image pixels nearest to the exact
     // direction.
 
+    /// NOTE: For some... Rather strange reason, sometimes, dir is [0, 0, 0]
     if(dir.norm() < 0.5f)
     {
         float pdf;
         Samplers::Sphere::Uniform uniform;
         dir = uniform.sample(pdf);
     }
-
+    dir = dir.unit();
     // Find the spherical coordinates from (x, y, z)
-    // printf("Vec: [%.2f, %.2f, %.2f] (Norm: %.2f)\n", dir.x, dir.y, dir.z, dir.norm());
-    assert(dir.norm() >= .99f);
- 
-    const float theta = acosf(
-        dir.z /
-        (sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z))
-        );
 
-
-   float phi =((atan2(dir.y, dir.x)) + PI_F);
+    // atan2 returns a value in the range [-pi, pi], offset by pi for [0, 2pi]
+    const float phi = atan2(dir.y, dir.x) + PI_F;
+    
+    // theta in range [0, pi].
+    const float theta = acosf( dir.z / dir.norm() );
 
     // Samples in environment map.
-    const float sample_x = to_range(phi, 0, 2 * PI_F);
-    const float sample_y = to_range(theta, 0, PI_F);
+    float sample_x = to_range(phi, 0, 2 * PI_F);
+
+    // Because we want theta = 0 to be the top of the image, we must "flip" our
+    // range so that theta = PI_F becomes sample_y = 1
+    float sample_y = 1.0f - to_range(theta, 0, PI_F);
 
     // Find lerp t-values
     float sample_x_t = to_range(sample_x, floorf(sample_x), ceilf(sample_x));
     float sample_y_t = to_range(sample_y, floorf(sample_y), ceilf(sample_y));
-
+    
     // Pixels in environment image map ()
     const std::pair<size_t, size_t>& dimensions =  image.dimension();
     size_t x = std::clamp((size_t)(sample_x * dimensions.first), 1UL, dimensions.first - 1);
     size_t y = std::clamp((size_t)(sample_y * dimensions.second), 1UL,  dimensions.second - 1);
-    // y = dimensions.second - y;
-
-    printf("(X, Y) : (%zu, %zu) | (%zu, %zu)\n", x, y,
-           dimensions.first, dimensions.second);
 
     // Perform bilinear interpolation.
     const size_t x_1 = (x >= dimensions.first - 2) ? x : x + 1;
@@ -95,7 +91,7 @@ Spectrum Env_Map::sample_direction(Vec3 dir) const {
     const Spectrum& top_right = image.at(x_1, y_1);
 
     const Spectrum bottom = lerp(bot_left, bot_right, sample_x_t);
-    const Spectrum top = lerp(top_left, top_right, sample_x_t);
+    const Spectrum top = lerp(top_left,    top_right, sample_x_t);
 
     const Spectrum bilerp = lerp(bottom, top, sample_y_t);
 
